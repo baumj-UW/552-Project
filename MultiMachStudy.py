@@ -26,3 +26,5 @@ Ybus = numpy.array([[-12.5, 0, 0, 12.5, 0, 0, 0, 0],
                     [0,]])  #append definition with dtype=complex
 
 
+#someone came in and edited the master file!
+#panic, how do these get merged?
