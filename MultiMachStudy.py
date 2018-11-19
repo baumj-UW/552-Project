@@ -8,7 +8,7 @@ Power System Dynamics - EE 552
 
 Based on Bergen and Vittal Example 14.6, p. 570
 '''
-
+## make more changes
 import math     # Math functions 
 import cmath    # Complex math function conj, rect
 import openpyxl # Methods to read and write xlsx files
