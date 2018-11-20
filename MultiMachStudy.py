@@ -13,6 +13,7 @@ import math     # Math functions
 import cmath    # Complex math function conj, rect
 import openpyxl # Methods to read and write xlsx files
 import numpy    # Methods for linear algebra
+from test.test_enumerate import EnumerateStartTestCase
 
 # Create Ybus matrix
 
@@ -30,3 +31,5 @@ Ybus = numpy.array([[-12.5, 0, 0, 12.5, 0, 0, 0, 0],
 #panic, how do these get merged?
 
 #make more changes
+
+#more test code to work on github
