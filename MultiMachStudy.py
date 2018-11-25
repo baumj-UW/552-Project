@@ -20,24 +20,54 @@ import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying 
 
 # simple ODE practice
 def model(y,t):
-    k = 0.3
-    dydt = k*y
+    k1 = 0.3
+    k2 = 2.0
+    x1, x2 = y
+    dydt = [x2, -k1*x2 - k2*numpy.sin(x1)]
     return dydt
 
-#init condits
-y0 = 5
+#Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
+def genModel (gens, t):
+    swingEqn, deltaW = gens  # vector of variable outputs
+    M = 0.6 #2*H*S/w_s 
+    Pm = 1.999 
+    Pe = 1.75
+    DAMP = 1.0 ## does this need to be here?
+#     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
+#     speedEqn = deltaW
+    dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
+    return dgdt # dgdt = synch gen model diff eqs
+
+# init condits
+gen0 = [0.0, 1.0]
 
 #time points
-t = numpy.linspace(0,20)
+t = numpy.linspace(0,1.5)  #change time steps 
 
-#solve ode
-y = odeint(model,y0,t)
-
-#plot
-plt.plot(t,y)
+#solve gen eqns
+response = odeint(genModel,gen0,t)
+# #plot
+plt.plot(t,response[:,0])
+plt.plot(t,response[:,1])
 plt.xlabel('time')
 plt.ylabel('y(t)')
 plt.show()
+
+# #init condits
+# y0 = [numpy.pi -0.1, 0.0]
+# 
+# #time points
+# t = numpy.linspace(0,10,101)
+# 
+# #solve ode
+# sol = odeint(model,y0,t)
+# 
+# #plot
+# plt.plot(t,sol[:,0])
+# plt.plot(t,sol[:,1])
+# plt.xlabel('time')
+# plt.ylabel('y(t)')
+# plt.show()
 
 
 # Create Ybus matrix
@@ -64,6 +94,8 @@ plt.show()
 # M*delta(w') = Pm - Pe - D*delta(w)
 # d' = delta(w)
 # Ttransdo*Etransq' = Ef - Etransq + Id*(Xd - Xtransd)
+
+# delta(w) = 'speed deviation'
 #===============================================================================
 
  
