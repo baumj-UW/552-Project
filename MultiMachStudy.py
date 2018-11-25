@@ -14,8 +14,15 @@ import math     # Math functions
 import cmath    # Complex math function conj, rect
 import openpyxl # Methods to read and write xlsx files
 import numpy    # Methods for linear algebra
+from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
+
+
+#Define Constants
+
+NGEN = 3 
+NBUS = 8
 
 
 # simple ODE practice
@@ -47,11 +54,11 @@ t = numpy.linspace(0,1.5)  #change time steps
 #solve gen eqns
 response = odeint(genModel,gen0,t)
 # #plot
-plt.plot(t,response[:,0])
-plt.plot(t,response[:,1])
-plt.xlabel('time')
-plt.ylabel('y(t)')
-plt.show()
+# plt.plot(t,response[:,0])
+# plt.plot(t,response[:,1])
+# plt.xlabel('time')
+# plt.ylabel('y(t)')
+# plt.show()
 
 # #init condits
 # y0 = [numpy.pi -0.1, 0.0]
@@ -69,17 +76,18 @@ plt.show()
 # plt.ylabel('y(t)')
 # plt.show()
 
+# Step 1 - Convert to common base (already done for this project) 
 
 # Create Ybus matrix
-# 
-# Ybus = numpy.array([[-12.5, 0, 0, 12.5, 0, 0, 0, 0],
-#                     [0, -5.556, 0, 0, 5.556, 0, 0, 0],
-#                     [0, 0, -8.333, 0, 0, 8.333, 0, 0],
-#                     [12.5, 0, 0, -32.48, 10, 0, 10, 0],
-#                     [0,]
-#                     [0,]
-#                     [0,]
-#                     [0,]])  #append definition with dtype=complex
+ 
+Ybus_pre = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
+                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
+                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j, 10.0j],
+                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.0j, 10.0j, 10.0j],
+                    [0.0, 0.0, 0.0, 10.j, 10.0j, 10.0j, 2.917-31.217j, 0.0],
+                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex)  #append definition with dtype=complex
 
 
 # Step 2 Add model of load admittances
@@ -89,6 +97,18 @@ plt.show()
 # Step 4 cacluate prefault / fault / post fault admittance matrices 
 
 # Step 5 Kron reduction 
+# Yreduced = Ynn - Yns*(1/Yss)*Ysn
+# n = NGENS , s = remaining system nodes
+def kronRed(Y,n,s): 
+    Ynn = Y[0:n,0:n]
+    Yns = Y[0:n,n:s] 
+    Ysn = Y[n:s,0:n]
+    Yss_inv = inv(Y[n:s,n:s])
+    Yhat = Ynn - numpy.dot(numpy.dot(Yns,Yss_inv),Ysn)
+    return Yhat 
+
+Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
+print(Ypre_red)
 #===============================================================================
 # Solve Equations with scipy.integrate.odeint 
 # M*delta(w') = Pm - Pe - D*delta(w)
