@@ -89,6 +89,23 @@ Ybus_pre = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 10.j, 10.0j, 10.0j, 2.917-31.217j, 0.0],
                     [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex)  #append definition with dtype=complex
 
+Ybus_fault = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
+                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 0.0, 0.0],
+                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 0.0, 10.0j],
+                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.313j, 0.0, 10.0j],
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex) 
+
+Ybus_post = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
+                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
+                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j, 10.0j],
+                    [0.0, 0.0, 8.333j, 0.0, 0.0, -18.313j, 0.0, 10.0j],
+                    [0.0, 0.0, 0.0, 10.j, 10.0j, 0.0, 2.917-21.217j, 0.0],
+                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex) 
 
 # Step 2 Add model of load admittances
 
@@ -108,7 +125,11 @@ def kronRed(Y,n,s):
     return Yhat 
 
 Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
+#Yfault_red = kronRed(Ybus_fault,NGEN,NBUS)  --> fix singular issue with fault bus
+Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
 print(Ypre_red)
+#print(Yfault_red)
+print(Ypost_red)
 #===============================================================================
 # Solve Equations with scipy.integrate.odeint 
 # M*delta(w') = Pm - Pe - D*delta(w)
