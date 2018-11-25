@@ -14,7 +14,30 @@ import math     # Math functions
 import cmath    # Complex math function conj, rect
 import openpyxl # Methods to read and write xlsx files
 import numpy    # Methods for linear algebra
-from scipy.integrate import odeint
+from scipy.integrate import odeint  #refs odeint directly instead of long pointer
+import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
+
+
+# simple ODE practice
+def model(y,t):
+    k = 0.3
+    dydt = k*y
+    return dydt
+
+#init condits
+y0 = 5
+
+#time points
+t = numpy.linspace(0,20)
+
+#solve ode
+y = odeint(model,y0,t)
+
+#plot
+plt.plot(t,y)
+plt.xlabel('time')
+plt.ylabel('y(t)')
+plt.show()
 
 
 # Create Ybus matrix
