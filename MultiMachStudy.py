@@ -30,7 +30,4 @@ Ybus = numpy.array([[-12.5, 0, 0, 12.5, 0, 0, 0, 0],
 #someone came in and edited the master file!
 #panic, how do these get merged?
 
-#conflicT?!?
-
-#more test code to work on github
-#one two three
+#clearing comments
