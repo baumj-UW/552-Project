@@ -28,6 +28,7 @@ Ybus = numpy.array([[-12.5, 0, 0, 12.5, 0, 0, 0, 0],
 
 
 #someone came in and edited the master file!
-#panic, how do these get merged?
+
+#Now I have my own edits which will be saved...
 
 #clearing comments
