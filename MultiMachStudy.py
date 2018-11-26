@@ -211,8 +211,8 @@ t = numpy.linspace(0,1.5)  #change time steps
 response = odeint(genModel,gen0,t)
  
 # #plot
-# plt.plot(t,response[:,0])
-# plt.plot(t,response[:,1])
-# plt.xlabel('time')
-# plt.ylabel('y(t)')
-# plt.show()
+plt.plot(t,response[:,0])
+plt.plot(t,response[:,1])
+plt.xlabel('time')
+plt.ylabel('y(t)')
+plt.show()
