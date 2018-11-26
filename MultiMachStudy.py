@@ -210,7 +210,7 @@ t = numpy.linspace(0,1.5)  #change time steps
 #solve gen eqns
 response = odeint(genModel,gen0,t)
  
-# #plot
+ #plot
 plt.plot(t,response[:,0])
 plt.plot(t,response[:,1])
 plt.xlabel('time')
