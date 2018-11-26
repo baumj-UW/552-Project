@@ -33,26 +33,26 @@ def model(y,t):
     dydt = [x2, -k1*x2 - k2*numpy.sin(x1)]
     return dydt
 
-#Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
-def genModel (gens, t):
-    swingEqn, deltaW = gens  # vector of variable outputs
-    M = 0.6 #2*H*S/w_s 
-    Pm = 1.999 
-    Pe = 1.75
-    DAMP = 1.0 ## does this need to be here?
-#     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
-#     speedEqn = deltaW
-    dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
-    return dgdt # dgdt = synch gen model diff eqs
-
-# init condits
-gen0 = [0.0, 1.0]
-
-#time points
-t = numpy.linspace(0,1.5)  #change time steps 
-
-#solve gen eqns
-response = odeint(genModel,gen0,t)
+# #Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
+# def genModel (gens, t):
+#     swingEqn, deltaW = gens  # vector of variable outputs
+#     M = 0.6 #2*H*S/w_s 
+#     Pm = 1.999 
+#     Pe = 1.75
+#     DAMP = 1.0 ## does this need to be here?
+# #     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
+# #     speedEqn = deltaW
+#     dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
+#     return dgdt # dgdt = synch gen model diff eqs
+# 
+# # init condits
+# gen0 = [0.0, 1.0]  #init condits [delta0, w0]
+# 
+# #time points
+# t = numpy.linspace(0,1.5)  #change time steps 
+# 
+# #solve gen eqns
+# response = odeint(genModel,gen0,t)
 # #plot
 # plt.plot(t,response[:,0])
 # plt.plot(t,response[:,1])
@@ -85,9 +85,12 @@ Qbus = numpy.zeros((NBUS,1)) #vector of Q at each bus
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
 
+Xd_trans = numpy.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
+
 #assign outputs from book solution 
 Vmag[NGEN:NBUS] = [[1.04],[1.02],[1.05],[0.9911],[1.0135]]
-Vtheta[NGEN:NBUS] = [[0.0],[-3.55],[-2.90],[-7.48],[-7.05]]
+## Degrees Vtheta[NGEN:NBUS] = [[0.0],[-3.55],[-2.90],[-7.48],[-7.05]]
+Vtheta[NGEN:NBUS] = [[0.0],[-0.06196],[-0.05061],[-0.13055],[-0.12305]]
 
 Pbus[0:NGEN] = [[1.9991],[0.6661],[1.600]]
 Qbus[0:NGEN] = [[0.8134],[0.2049],[1.051]]
@@ -144,10 +147,12 @@ def calcEi(Vmag,Vtheta,xd,P,Q):
     #cmath.polar()Ei_r2+Ei_i2*1j
     Ei_mag = abs(Ei)
     phase_it = cmath.phase(Ei)  #angle between E and Vterm in rad
-    gen_angle = phase_it + Vtheta #internal gen angle, CHANGE VTHETA TO RADIANS!!
+    gen_angle = phase_it + Vtheta #internal gen angle in rad
     return Ei_mag,gen_angle
 
-Vmag[1], Vtheta[1] = calcEi(Vmag[5-1],Vtheta[5-1],0.18,Pbus[2-1],Qbus[2-1])  #probably a better way to assign these values
+Vmag[0], Vtheta[0] = calcEi(Vmag[4-1],Vtheta[4-1],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
+Vmag[1], Vtheta[1] = calcEi(Vmag[5-1],Vtheta[5-1],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
+Vmag[2], Vtheta[2] = calcEi(Vmag[6-1],Vtheta[6-1],Xd_trans[2],Pbus[3-1],Qbus[3-1])
 
 # Step 4 cacluate prefault / fault / post fault admittance matrices 
 
@@ -176,6 +181,38 @@ print(Ypost_red)
 
 # delta(w) = 'speed deviation'
 #===============================================================================
+#Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
+def genModel (gens, t):
+    swingEqn, deltaW = gens  # vector of variable outputs
+    M = 0.6 #2*H*S/w_s 
+    Pm = 1.999 
+    Pe = 1.75
+    DAMP = 1.0 ## does this need to be here?
+#     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
+#     speedEqn = deltaW
+    dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
+    return dgdt # dgdt = synch gen model diff eqs
 
+def Pg_i (gen,Ybus,Vmag,Vtheta):
+    #numpy.real(Ybus[ii]) = Gii, numpy.imag(Ybus[ii]) = B
+    Pg = (Vmag[gen-1] ** 2) * numpy.real(Ybus[gen-1,gen-1])
+    # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
+    return Pg
+
+Pg1 = Pg_i(1,Ypre_red,Vmag,Vtheta)
+
+# init condits
+gen0 = [Vtheta[0], 0.0]  #init condits [delta0, w0]
+
+#time points
+t = numpy.linspace(0,1.5)  #change time steps 
+
+#solve gen eqns
+response = odeint(genModel,gen0,t)
  
-
+# #plot
+# plt.plot(t,response[:,0])
+# plt.plot(t,response[:,1])
+# plt.xlabel('time')
+# plt.ylabel('y(t)')
+# plt.show()
