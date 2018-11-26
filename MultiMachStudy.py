@@ -78,7 +78,22 @@ response = odeint(genModel,gen0,t)
 
 # Step 1 - Convert to common base (already done for this project) 
 
+Vmag = numpy.zeros((NBUS,1))   #vector of voltage magnitudes
+Vtheta = numpy.zeros((NBUS,1))  # vector of volt angles in degrees
+Pbus = numpy.zeros((NBUS,1)) #vector of P at each bus
+Qbus = numpy.zeros((NBUS,1)) #vector of Q at each bus
+
+# cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
+
+#assign outputs from book solution 
+Vmag[NGEN:NBUS] = [[1.04],[1.02],[1.05],[0.9911],[1.0135]]
+Vtheta[NGEN:NBUS] = [[0.0],[-3.55],[-2.90],[-7.48],[-7.05]]
+
+Pbus[0:NGEN] = [[1.9991],[0.6661],[1.600]]
+Qbus[0:NGEN] = [[0.8134],[0.2049],[1.051]]
 # Create Ybus matrix
+
+#replace this with calculation from actual bus data 
  
 Ybus_pre = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
@@ -110,6 +125,29 @@ Ybus_post = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
 # Step 2 Add model of load admittances
 
 # Step 3 calculate internal gen voltages
+# 2nd order model calc (following book example)
+# Ei<delta = Vterm_mag + jXdi*(Pg-jQg)/Vterm 
+
+#change Ei to vector , def. xd
+#xd = 0.18
+#Ei = numpy.add((Vmag[5],numpy.multiply(Qbus[2],numpy.divide(xd[2]/Vmag[5])))) #+ (Pbus[2]*xd[2]/Vmag[5])*1j   
+
+def calcEi(Vmag,Vtheta,xd,P,Q):
+    a = xd * Q 
+    b = a / Vmag 
+    Ei_r = Vmag + b #real part
+    
+    c = P * xd 
+    Ei_i = c / Vmag #imag part
+    
+    Ei = Ei_r+Ei_i*1j
+    #cmath.polar()Ei_r2+Ei_i2*1j
+    Ei_mag = abs(Ei)
+    phase_it = cmath.phase(Ei)  #angle between E and Vterm in rad
+    gen_angle = phase_it + Vtheta #internal gen angle, CHANGE VTHETA TO RADIANS!!
+    return Ei_mag,gen_angle
+
+Vmag[1], Vtheta[1] = calcEi(Vmag[5-1],Vtheta[5-1],0.18,Pbus[2-1],Qbus[2-1])  #probably a better way to assign these values
 
 # Step 4 cacluate prefault / fault / post fault admittance matrices 
 
