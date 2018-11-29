@@ -13,7 +13,7 @@ Machowski pdf p. 486, 3rd order model
 import math     # Math functions 
 import cmath    # Complex math function conj, rect
 import openpyxl # Methods to read and write xlsx files
-import numpy    # Methods for linear algebra
+import numpy as np  # Methods for linear algebra
 from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
@@ -24,13 +24,24 @@ import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying 
 NGEN = 3 
 NBUS = 8
 
+BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
+                    [0,1,0,0,1,0,0,0],
+                    [0,0,1,0,0,1,0,0],
+                    [1,0,0,1,1,0,1,0],
+                    [0,1,0,1,1,0,1,1],
+                    [0,0,1,0,0,1,1,1],
+                    [0,0,0,1,1,1,1,0],
+                    [0,0,0,0,1,1,0,1]]) #T/F matrix indiciating bus connections for the system 
+
+LINE_XL = 0.1 #Line series admittance
+LINE_YB = 0.01 #Line shunt admittance 
 
 # simple ODE practice
 def model(y,t):
     k1 = 0.3
     k2 = 2.0
     x1, x2 = y
-    dydt = [x2, -k1*x2 - k2*numpy.sin(x1)]
+    dydt = [x2, -k1*x2 - k2*np.sin(x1)]
     return dydt
 
 # #Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
@@ -49,7 +60,7 @@ def model(y,t):
 # gen0 = [0.0, 1.0]  #init condits [delta0, w0]
 # 
 # #time points
-# t = numpy.linspace(0,1.5)  #change time steps 
+# t = np.linspace(0,1.5)  #change time steps 
 # 
 # #solve gen eqns
 # response = odeint(genModel,gen0,t)
@@ -61,10 +72,10 @@ def model(y,t):
 # plt.show()
 
 # #init condits
-# y0 = [numpy.pi -0.1, 0.0]
+# y0 = [np.pi -0.1, 0.0]
 # 
 # #time points
-# t = numpy.linspace(0,10,101)
+# t = np.linspace(0,10,101)
 # 
 # #solve ode
 # sol = odeint(model,y0,t)
@@ -78,14 +89,15 @@ def model(y,t):
 
 # Step 1 - Convert to common base (already done for this project) 
 
-Vmag = numpy.zeros((NBUS,1))   #vector of voltage magnitudes
-Vtheta = numpy.zeros((NBUS,1))  # vector of volt angles in degrees
-Pbus = numpy.zeros((NBUS,1)) #vector of P at each bus
-Qbus = numpy.zeros((NBUS,1)) #vector of Q at each bus
+
+Vmag = np.zeros((NBUS,1))   #vector of voltage magnitudes
+Vtheta = np.zeros((NBUS,1))  # vector of volt angles in degrees
+Pbus = np.zeros((NBUS,1)) #vector of P at each bus
+Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
 
-Xd_trans = numpy.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
+Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
 
 #assign outputs from book solution 
 Vmag[NGEN:NBUS] = [[1.04],[1.02],[1.05],[0.9911],[1.0135]]
@@ -94,11 +106,43 @@ Vtheta[NGEN:NBUS] = [[0.0],[-0.06196],[-0.05061],[-0.13055],[-0.12305]]
 
 Pbus[0:NGEN] = [[1.9991],[0.6661],[1.600]]
 Qbus[0:NGEN] = [[0.8134],[0.2049],[1.051]]
-# Create Ybus matrix
+# Create Ybus matrix (without load and gen admittance)
+
+#Calculate equiv. shunt load admittance and add to Ybus matrix
+#Create separate G and B buses for real and imag parts
+Ybus_pre_G = np.zeros((NBUS,NBUS))
+Ybus_pre_B = np.zeros((NBUS,NBUS))
+
+#gen bus series and self admittances
+for bus_i in range(0,NGEN):
+    for bus_j in range(0,NBUS):
+        if BUS_CONN[bus_i,bus_j]:
+           if bus_i == bus_j:
+               Ybus_pre_B[bus_i,bus_j] = -1/Xd_trans[bus_i]
+               Ybus_pre_B[bus_j,bus_i] = -1/Xd_trans[bus_i]
+           else:
+               Ybus_pre_B[bus_i,bus_j] = 1/Xd_trans[bus_i]
+               Ybus_pre_B[bus_j,bus_i] = 1/Xd_trans[bus_i]
+
+#System bus admittances
+for bus_i in range(NGEN,NBUS):
+    for bus_j in range(NGEN,NBUS):  #ADD SKIP FOR I=J
+        if np.logical_and(BUS_CONN[bus_i,bus_j],(bus_i != bus_j)):
+            Ybus_pre_B[bus_i,bus_j]= 1/LINE_XL
+
+
+
+# use complexY = Ybus_pre_G + 1j*Ybus_pre_B
+            
+#Calculate equiv gen bus E and delta
+#Create full augmented Ybus matrix (includes gen and load admittance)
+# Pre-fault: calc. from steady state augmented matrix
+# fault: Assume 3ph-g fault, set 
+
 
 #replace this with calculation from actual bus data 
  
-Ybus_pre = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+Ybus_pre = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
                     [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
                     [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
@@ -107,7 +151,8 @@ Ybus_pre = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 10.j, 10.0j, 10.0j, 2.917-31.217j, 0.0],
                     [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex)  #append definition with dtype=complex
 
-Ybus_fault = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+#"remove" bus 7 during fault 
+Ybus_fault = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
                     [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
                     [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 0.0, 0.0],
@@ -116,7 +161,7 @@ Ybus_fault = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex) 
 
-Ybus_post = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
+Ybus_post = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
                     [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
                     [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
@@ -133,7 +178,7 @@ Ybus_post = numpy.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
 
 #change Ei to vector , def. xd
 #xd = 0.18
-#Ei = numpy.add((Vmag[5],numpy.multiply(Qbus[2],numpy.divide(xd[2]/Vmag[5])))) #+ (Pbus[2]*xd[2]/Vmag[5])*1j   
+#Ei = np.add((Vmag[5],np.multiply(Qbus[2],np.divide(xd[2]/Vmag[5])))) #+ (Pbus[2]*xd[2]/Vmag[5])*1j   
 
 def calcEi(Vmag,Vtheta,xd,P,Q):
     a = xd * Q 
@@ -164,7 +209,7 @@ def kronRed(Y,n,s):
     Yns = Y[0:n,n:s] 
     Ysn = Y[n:s,0:n]
     Yss_inv = inv(Y[n:s,n:s])
-    Yhat = Ynn - numpy.dot(numpy.dot(Yns,Yss_inv),Ysn)
+    Yhat = Ynn - np.dot(np.dot(Yns,Yss_inv),Ysn)
     return Yhat 
 
 Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
@@ -194,8 +239,8 @@ def genModel (gens, t):
     return dgdt # dgdt = synch gen model diff eqs
 
 def Pg_i (gen,Ybus,Vmag,Vtheta):
-    #numpy.real(Ybus[ii]) = Gii, numpy.imag(Ybus[ii]) = B
-    Pg = (Vmag[gen-1] ** 2) * numpy.real(Ybus[gen-1,gen-1])
+    #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
+    Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
     # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
     return Pg
 
@@ -205,7 +250,7 @@ Pg1 = Pg_i(1,Ypre_red,Vmag,Vtheta)
 gen0 = [Vtheta[0], 0.0]  #init condits [delta0, w0]
 
 #time points
-t = numpy.linspace(0,1.5)  #change time steps 
+t = np.linspace(0,1.5)  #change time steps 
 
 #solve gen eqns
 response = odeint(genModel,gen0,t)
