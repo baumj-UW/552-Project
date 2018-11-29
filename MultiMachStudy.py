@@ -223,45 +223,63 @@ print(Ypre_red)
 #print(Yfault_red)
 print(Ypost_red)
 #===============================================================================
-# Solve Equations with scipy.integrate.odeint 
+# Solve Equations with scipy.integrate.odeint --> NOT WORKING
+# Solve Equations with Forward Euler
 # M*delta(w') = Pm - Pe - D*delta(w)
 # d' = delta(w)
 # Ttransdo*Etransq' = Ef - Etransq + Id*(Xd - Xtransd)
 
-# delta(w) = 'speed deviation'
+# delta(w) = 'speed deviation' --> variable dOmega
 #===============================================================================
-#Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
-def genModel (gens, t):
-    swingEqn, deltaW = gens  # vector of variable outputs
-    M = 0.6 #2*H*S/w_s 
-    Pm = 1.999 
-    Pe = 1.75
-    DAMP = 1.0 ## does this need to be here?
-#     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
-#     speedEqn = deltaW
-    dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
-    return dgdt # dgdt = synch gen model diff eqs
+#
 
-def Pg_i (gen,Ybus,Vmag,Vtheta):
-    #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
-    Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
-    # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
-    return Pg
+#forward Euler Yn+1 = Yn + h*f(Tn,Yn)
+#Derivative Functions
+def dOmega_hat(t,Pm,Pe,D,dOmega):
+    dWdt = Pm - Pe - D*dOmega 
+    return dWdt
 
-Pg1 = Pg_i(1,Ypre_red,Vmag,Vtheta)
+def delta_hat(dOmega): #function prob not necessary for delta_hat = dOmega 
+    return dOmega 
 
-# init condits
-gen0 = [Vtheta[0], 0.0]  #init condits [delta0, w0]
+def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
+    return dEq_trans_dt
 
-#time points
-t = np.linspace(0,1.5)  #change time steps 
-
-#solve gen eqns
-response = odeint(genModel,gen0,t)
- 
- #plot
-plt.plot(t,response[:,0])
-plt.plot(t,response[:,1])
-plt.xlabel('time')
-plt.ylabel('y(t)')
-plt.show()
+def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
+    return dEq_trans_dt
+# ODE solver method -- NOT WORKING
+##Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
+# def genModel (gens, t):
+#     swingEqn, deltaW = gens  # vector of variable outputs
+#     M = 0.6 #2*H*S/w_s 
+#     Pm = 1.999 
+#     Pe = 1.75
+#     DAMP = 1.0 ## does this need to be here?
+# #     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
+# #     speedEqn = deltaW
+#     dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
+#     return dgdt # dgdt = synch gen model diff eqs
+# 
+# def Pg_i (gen,Ybus,Vmag,Vtheta):
+#     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
+#     Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
+#     # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
+#     return Pg
+# 
+# Pg1 = Pg_i(1,Ypre_red,Vmag,Vtheta)
+# 
+# # init condits
+# gen0 = [Vtheta[0], 0.0]  #init condits [delta0, w0]
+# 
+# #time points
+# t = np.linspace(0,1.5)  #change time steps 
+# 
+# #solve gen eqns
+# response = odeint(genModel,gen0,t)
+#  
+#  #plot
+# plt.plot(t,response[:,0])
+# plt.plot(t,response[:,1])
+# plt.xlabel('time')
+# plt.ylabel('y(t)')
+# plt.show()
