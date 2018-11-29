@@ -124,11 +124,15 @@ for bus_i in range(0,NGEN):
                Ybus_pre_B[bus_i,bus_j] = 1/Xd_trans[bus_i]
                Ybus_pre_B[bus_j,bus_i] = 1/Xd_trans[bus_i]
 
-#System bus admittances
+#System bus series admittances
 for bus_i in range(NGEN,NBUS):
-    for bus_j in range(NGEN,NBUS):  #ADD SKIP FOR I=J
+    for bus_j in range(NGEN,NBUS):
         if np.logical_and(BUS_CONN[bus_i,bus_j],(bus_i != bus_j)):
             Ybus_pre_B[bus_i,bus_j]= 1/LINE_XL
+
+#System bus self admittances             
+for bus_i in range(NGEN,NBUS):
+    Ybus_pre_B[bus_i,bus_i] = -1*np.sum(Ybus_pre_B[bus_i,:]) + LINE_YB*(np.sum(BUS_CONN[bus_i,NGEN:NBUS])-1)
 
 
 
