@@ -16,6 +16,7 @@ import openpyxl # Methods to read and write xlsx files
 import numpy as np  # Methods for linear algebra
 from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
+from scipy.integrate import solve_ivp #ODE45 equiv (use this instead of odeint)
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
 
 
@@ -218,11 +219,8 @@ def kronRed(Y,n,s):
 Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
 Yfault_red = kronRed(Ybus_fault,NGEN,NBUS)
 Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
-print(Ypre_red)
-print(Yfault_red)
-print(Ypost_red)
 #===============================================================================
-# Solve Equations with scipy.integrate.odeint --> NOT WORKING
+# Solve Equations with scscipy.integrate.solve_ivp(f) --> NOT WORKING
 # Solve Equations with Forward Euler
 # M*delta(w') = Pm - Pe - D*delta(w)
 # d' = delta(w)
@@ -231,11 +229,11 @@ print(Ypost_red)
 # delta(w) = 'speed deviation' --> variable dOmega
 #===============================================================================
 #
-
-#forward Euler Yn+1 = Yn + h*f(Tn,Yn)
-h = 0.01 #step size
-
-
+# #time points
+timepoints = np.linspace(0,1.5)  #change time steps 
+ 
+#Calc speed deviation
+gen1 = np.zeros([np.size(timepoints),2])  #gen1 is an array of [rotor angles, speed deviatons] 
 
 
 
@@ -245,7 +243,7 @@ def dOmega_hat(t,Pm,Pe,D,dOmega):
     dWdt = Pm - Pe - D*dOmega 
     return dWdt
 
-def delta_hat(dOmega): #function prob not necessary for delta_hat = dOmega 
+def delta_hat(t,dOmega): #function prob not necessary for delta_hat = dOmega 
     return dOmega 
 
 def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
@@ -255,29 +253,45 @@ def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
     return dEq_trans_dt
 
 
-# #time points
-t = np.linspace(0,1.5)  #change time steps 
-
-#Calc speed deviation
-gen1 = np.zeros([np.size(t),2])  #gen1 is an array of [rotor angles, speed deviatons] 
-
-# # init condits
+# # # init condits
 gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0]
+# gen2[0,:] = Vtheta[1], 0.0 
+# gen3[0,:] = Vtheta[2], 0.0
 
-#Iterate through time steps
-for tstep in range(len(t)-1):
-    gen1[tstep+1,0] = gen1[tstep,0] + h*gen1[tstep,1]  #iterate next step for rotor angle calc (this is delta_hat at time t)
-    
-    gen1[tstep+1,1] = gen1[tstep,0] + h*dOmega_hat(tstep,Pm,Pe,D,dOmega) 
-    
-
-
+sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0])
+sol_gen2 = solve_ivp(delta_hat,[0,1.5],Vtheta[1])
+sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2])
+print(sol.y[0,:])
+print(sol.t)
 #  #plot
-plt.plot(t,gen1[:,0])
+plt.plot(sol.t,sol.y[0,:])
+plt.plot(sol_gen2.t,sol_gen2.y[0,:])
+plt.plot(sol_gen3.t,sol_gen3.y[0,:])
 #plt.plot(t,response[:,1])
 plt.xlabel('time')
 plt.ylabel('Rotor Angle')
 plt.show()
+# #forward Euler Yn+1 = Yn + h*f(Tn,Yn)
+# h = 0.01 #step size
+# 
+# # #time points
+# t = np.linspace(0,1.5)  #change time steps 
+# 
+# #Calc speed deviation
+# gen1 = np.zeros([np.size(t),2])  #gen1 is an array of [rotor angles, speed deviatons] 
+# 
+# # # init condits
+# gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0]
+# 
+# #Iterate through time steps
+# for tstep in range(len(t)-1):
+#     gen1[tstep+1,0] = gen1[tstep,0] + h*gen1[tstep,1]  #iterate next step for rotor angle calc (this is delta_hat at time t)
+#     
+#     gen1[tstep+1,1] = gen1[tstep,0] + h*dOmega_hat(tstep,Pm,Pe,D,dOmega) 
+    
+
+
+
 
 # ODE solver method -- NOT WORKING
 ##Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
