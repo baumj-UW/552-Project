@@ -156,14 +156,13 @@ Ybus_pre = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex)  #append definition with dtype=complex
 
 #"remove" bus 7 during fault 
-Ybus_fault = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
-                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 0.0, 0.0],
-                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 0.0, 10.0j],
-                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.313j, 0.0, 10.0j],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex) 
+Ybus_fault = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0],
+                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0],
+                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0],
+                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 0.0],
+                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j],
+                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.313j, 10.0j],
+                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 1.363-20.369j]], dtype = complex) 
 
 Ybus_post = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
                     [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
@@ -217,10 +216,10 @@ def kronRed(Y,n,s):
     return Yhat 
 
 Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
-#Yfault_red = kronRed(Ybus_fault,NGEN,NBUS)  --> fix singular issue with fault bus
+Yfault_red = kronRed(Ybus_fault,NGEN,NBUS)
 Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
 print(Ypre_red)
-#print(Yfault_red)
+print(Yfault_red)
 print(Ypost_red)
 #===============================================================================
 # Solve Equations with scipy.integrate.odeint --> NOT WORKING
@@ -234,6 +233,13 @@ print(Ypost_red)
 #
 
 #forward Euler Yn+1 = Yn + h*f(Tn,Yn)
+h = 0.01 #step size
+
+
+
+
+
+
 #Derivative Functions
 def dOmega_hat(t,Pm,Pe,D,dOmega):
     dWdt = Pm - Pe - D*dOmega 
@@ -247,6 +253,32 @@ def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
 
 def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
     return dEq_trans_dt
+
+
+# #time points
+t = np.linspace(0,1.5)  #change time steps 
+
+#Calc speed deviation
+gen1 = np.zeros([np.size(t),2])  #gen1 is an array of [rotor angles, speed deviatons] 
+
+# # init condits
+gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0]
+
+#Iterate through time steps
+for tstep in range(len(t)-1):
+    gen1[tstep+1,0] = gen1[tstep,0] + h*gen1[tstep,1]  #iterate next step for rotor angle calc (this is delta_hat at time t)
+    
+    gen1[tstep+1,1] = gen1[tstep,0] + h*dOmega_hat(tstep,Pm,Pe,D,dOmega) 
+    
+
+
+#  #plot
+plt.plot(t,gen1[:,0])
+#plt.plot(t,response[:,1])
+plt.xlabel('time')
+plt.ylabel('Rotor Angle')
+plt.show()
+
 # ODE solver method -- NOT WORKING
 ##Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
 # def genModel (gens, t):
