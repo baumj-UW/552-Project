@@ -19,7 +19,6 @@ from scipy.integrate import odeint  #refs odeint directly instead of long pointe
 from scipy.integrate import solve_ivp #ODE45 equiv (use this instead of odeint)
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
 
-
 #Define Constants
 
 NGEN = 3 
@@ -229,21 +228,26 @@ Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
 # delta(w) = 'speed deviation' --> variable dOmega
 #===============================================================================
 #
+#Solving process:
+#For(whole time)
+    # init w/ pre-fault condits
+    # from 0 to 0.1 solve with fault matrix
+    # from 0.1 to  1.5s solve with post fault matrix  
+
 # #time points
 timepoints = np.linspace(0,1.5)  #change time steps 
  
 #Calc speed deviation
 gen1 = np.zeros([np.size(timepoints),2])  #gen1 is an array of [rotor angles, speed deviatons] 
 
-
-
-
 #Derivative Functions
-def dOmega_hat(t,Pm,Pe,D,dOmega):
-    dWdt = Pm - Pe - D*dOmega 
+def dOmega_hat(t,dWdt,Pm,Pe,D,dOmega,H):
+    M = 0.6 #2*H*S/w_s 
+    dWdt = 1/M*(Pm - Pe - D*dOmega) 
     return dWdt
 
-def delta_hat(t,dOmega): #function prob not necessary for delta_hat = dOmega 
+def delta_hat(t,delta): #function prob not necessary for delta_hat = dOmega 
+    dOmega = Omega[t]
     return dOmega 
 
 def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
@@ -252,25 +256,51 @@ def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
 def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
     return dEq_trans_dt
 
-
+def gen_Model(t,y,c):
+    H = 10 #2*H*S/w_s 
+    M = 0.6
+    Pm = 1.999 
+    Pe = 1.75
+    D = 1.0 ## does this need to be here
+    dWdt = 1/M*(Pm - Pe - D*y[0]) 
+    derivs = [dWdt,y[0]]
+    return derivs
 # # # init condits
-gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0]
+gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] --> not used here
 # gen2[0,:] = Vtheta[1], 0.0 
 # gen3[0,:] = Vtheta[2], 0.0
+c = 1
+sol = solve_ivp(lambda t, y: gen_Model(t,y,c),[0,1.5],
+                gen1[0,:],t_eval=timepoints)
 
-sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0])
-sol_gen2 = solve_ivp(delta_hat,[0,1.5],Vtheta[1])
-sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2])
-print(sol.y[0,:])
-print(sol.t)
-#  #plot
+#Solve for rotor angle
+# sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0],t_eval=timepoints)
+# sol_gen2 = solve_ivp(delta_hat,[0,1.5],Vtheta[1],t_eval=timepoints)
+# sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2],t_eval=timepoints)
+
+#  #plot rotor angles
 plt.plot(sol.t,sol.y[0,:])
-plt.plot(sol_gen2.t,sol_gen2.y[0,:])
-plt.plot(sol_gen3.t,sol_gen3.y[0,:])
+plt.plot(sol.t,sol.y[1,:])
+# plt.plot(sol_gen2.t,sol_gen2.y[0,:])
+# plt.plot(sol_gen3.t,sol_gen3.y[0,:])
 #plt.plot(t,response[:,1])
 plt.xlabel('time')
 plt.ylabel('Rotor Angle')
 plt.show()
+
+
+
+# 
+# def Pg_i (gen,Ybus,Vmag,Vtheta):
+#     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
+#     Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
+#     # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
+#     return Pg
+
+#use this call to send arguments 
+gen1_w = solve_ivp(lambda t, y: (t,dWdt,Pm,Pe,D,dOmega,H),[0,1.5],[0.0],t_eval=timepoints)
+
+print(gen1_w)
 # #forward Euler Yn+1 = Yn + h*f(Tn,Yn)
 # h = 0.01 #step size
 # 
