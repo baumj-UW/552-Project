@@ -256,22 +256,55 @@ def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
 def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
     return dEq_trans_dt
 
-def gen_Model(t,y,c):
+def gen_Model(t,y,Vmag,Ybus): #c is a placeholder for arguments 
     H = 10 #2*H*S/w_s 
     M = 0.6
     Pm = 1.999 
-    Pe = 1.75
-    D = 1.0 ## does this need to be here
-    dWdt = 1/M*(Pm - Pe - D*y[0]) 
-    derivs = [dWdt,y[0]]
+    #Pe = 1.75
+    angles = [[y[1]],[y[3]],y[5]] #rotor angles 
+    omega = [[y[0]],[y[2]],y[4]] #speeds 
+    for gen in range(NGEN):
+        Pe[gen] = Pg_i(gen,Ybus,Vmag,angles)
+        dWdt[gen] = 1/M*(Pm - Pe[gen] - D*omega[gen]) #y[] index for array of derivs
+        #derivs[0,gen:gen+1] = dWdt[gen],omega[gen]  <-- add this later in place of last line
+ 
+#     dWdt1 = 1/M*(Pm - Pe1 - D*y[0]) 
+#     dWdt2 = 1/M*(Pm - Pe2 - D*y[2]) #make gen specific
+#     dWdt3 = 1/M*(Pm - Pe3 - D*y[4]) #make gen specific
+    derivs = [dWdt[0],omega[0],dWdt[1],omega[1],dWdt[2],omega[2]]
     return derivs
-# # # init condits
-gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] --> not used here
+
+
+# # Pre-fault initial condits and args --> send as an array to gen_Model 
+for gen in range(NGEN):
+    initGen[0,gen:gen+1] ## init all the gens!
+gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] 
 # gen2[0,:] = Vtheta[1], 0.0 
 # gen3[0,:] = Vtheta[2], 0.0
-c = 1
-sol = solve_ivp(lambda t, y: gen_Model(t,y,c),[0,1.5],
-                gen1[0,:],t_eval=timepoints)
+Pm = Pbus[0]#Pe pre-fault 
+D = 1.0 ## does this need to be here
+gen1_params = [Pm, D]
+
+
+def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}
+    Pg = 0.0    #init Pg to 0 then calc.
+    #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
+    for gen_j in range(NGEN):
+        Gii = np.real(Ybus[gen_i,gen_i])
+        Gij = np.real(Ybus[gen_i,gen_j])
+        Bij = np.imag(Ybus[gen_i,gen_j])
+        di = Vtheta[gen_i]
+        dj = Vtheta[gen_j]
+        if gen_j == (gen_i):
+            Pg += (Vmag[gen_i] ** 2) * Gii
+        else:
+            Pg += Vmag[gen_i]*Vmag[gen_j]*(Bij*math.sin(di-dj) + Gij*math.cos(di-dj))
+
+    return Pg
+
+#solve response during fault time 0,0.1s
+sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag,Yfault_red),[0,1.5],
+                gen1[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
 
 #Solve for rotor angle
 # sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0],t_eval=timepoints)
@@ -291,11 +324,7 @@ plt.show()
 
 
 # 
-# def Pg_i (gen,Ybus,Vmag,Vtheta):
-#     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
-#     Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
-#     # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
-#     return Pg
+
 
 #use this call to send arguments 
 gen1_w = solve_ivp(lambda t, y: (t,dWdt,Pm,Pe,D,dOmega,H),[0,1.5],[0.0],t_eval=timepoints)
