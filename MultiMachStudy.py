@@ -37,59 +37,18 @@ BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
 LINE_XL = 0.1 #Line series admittance
 LINE_YB = 0.01 #Line shunt admittance 
 
-# simple ODE practice
-def model(y,t):
-    k1 = 0.3
-    k2 = 2.0
-    x1, x2 = y
-    dydt = [x2, -k1*x2 - k2*np.sin(x1)]
-    return dydt
+W_S = 2*math.pi*60 #synchronous speed 
 
-# #Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
-# def genModel (gens, t):
-#     swingEqn, deltaW = gens  # vector of variable outputs
-#     M = 0.6 #2*H*S/w_s 
-#     Pm = 1.999 
-#     Pe = 1.75
-#     DAMP = 1.0 ## does this need to be here?
-# #     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
-# #     speedEqn = deltaW
-#     dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
-#     return dgdt # dgdt = synch gen model diff eqs
-# 
-# # init condits
-# gen0 = [0.0, 1.0]  #init condits [delta0, w0]
-# 
-# #time points
-# t = np.linspace(0,1.5)  #change time steps 
-# 
-# #solve gen eqns
-# response = odeint(genModel,gen0,t)
-# #plot
-# plt.plot(t,response[:,0])
-# plt.plot(t,response[:,1])
-# plt.xlabel('time')
-# plt.ylabel('y(t)')
-# plt.show()
-
-# #init condits
-# y0 = [np.pi -0.1, 0.0]
-# 
-# #time points
-# t = np.linspace(0,10,101)
-# 
-# #solve ode
-# sol = odeint(model,y0,t)
-# 
-# #plot
-# plt.plot(t,sol[:,0])
-# plt.plot(t,sol[:,1])
-# plt.xlabel('time')
-# plt.ylabel('y(t)')
-# plt.show()
+Sn = 1.0 #Per unit rating of the generators (100MVA base) 
+H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
+Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
 
 # Step 1 - Convert to common base (already done for this project) 
 
+#Calculate Inertia Coefficient M
+M = np.zeros((NGEN,1))
+for gen in range(NGEN):
+    M[gen] = 2*H[gen]*Sn/W_S
 
 Vmag = np.zeros((NBUS,1))   #vector of voltage magnitudes
 Vtheta = np.zeros((NBUS,1))  # vector of volt angles in degrees
@@ -98,7 +57,6 @@ Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
 
-Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
 
 #assign outputs from book solution 
 Vmag[NGEN:NBUS] = [[1.04],[1.02],[1.05],[0.9911],[1.0135]]
@@ -241,29 +199,28 @@ timepoints = np.linspace(0,1.5)  #change time steps
 #Calc speed deviation
 gen1 = np.zeros([np.size(timepoints),2])  #gen1 is an array of [rotor angles, speed deviatons] 
 
-#Derivative Functions
-def dOmega_hat(t,dWdt,Pm,Pe,D,dOmega,H):
-    M = 0.6 #2*H*S/w_s 
-    dWdt = 1/M*(Pm - Pe - D*dOmega) 
-    return dWdt
+##Derivative Functions
+# def dOmega_hat(t,dWdt,Pm,Pe,D,dOmega,H):
+#     M = 0.6 #2*H*S/w_s 
+#     dWdt = 1/M*(Pm - Pe - D*dOmega) 
+#     return dWdt
+# 
+# def delta_hat(t,delta): #function prob not necessary for delta_hat = dOmega 
+#     dOmega = Omega[t]
+#     return dOmega 
+# 
+# def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
+#     return dEq_trans_dt
+# 
+# def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
+#     return dEq_trans_dt
 
-def delta_hat(t,delta): #function prob not necessary for delta_hat = dOmega 
-    dOmega = Omega[t]
-    return dOmega 
+def gen_Model(t,y,Vmag,Ybus,Pm,M): #y is an array of [w1,w2,w3,d1,d2,d3]
+    #H = 10 #2*H*S/w_s 
+    #M = 0.6
+    D = 0 ## Neglect Pd for 2nd order Model
+    #Pm = 1.999 #<-- Pm from Pbus init state 
 
-def emfTransQ_hat(Ef,Eq_trans,Id,Xd,Xd_trans,Tdo_trans):
-    return dEq_trans_dt
-
-def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
-    return dEq_trans_dt
-
-def gen_Model(t,y,Vmag,Ybus): #c is a placeholder for arguments 
-    H = 10 #2*H*S/w_s 
-    M = 0.6
-    Pm = 1.999 #<-- update to init condits 
-    #Pe = 1.75
-#     angles = [[y[1]],[y[3]],y[5]] #rotor angles --> change index order and get rid of this
-#     omega = [[y[0]],[y[2]],y[4]] #speeds 
     omega = y[0:NGEN]
     delta = y[NGEN:]
     
@@ -271,7 +228,7 @@ def gen_Model(t,y,Vmag,Ybus): #c is a placeholder for arguments
     dWdt = np.zeros((NGEN,1))
     for gen in range(NGEN):
         Pe[gen] = Pg_i(gen,Ybus,Vmag,delta)  
-        dWdt[gen] = 1/M*(Pm - Pe[gen] - D*omega[gen])  #Pm needs to be gen specific
+        dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  #
  
     derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2]] #simplify with concat[dWdt; omegas]
     return derivs
@@ -282,12 +239,9 @@ def gen_Model(t,y,Vmag,Ybus): #c is a placeholder for arguments
 initGen = np.zeros((1,2*NGEN)) #[w1, w2, w3, delta1, delta2, delta3] w = 0
 for gen in range(NGEN):
     initGen[0,gen+NGEN]  = Vtheta[gen,0] 
-#gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] 
-# gen2[0,:] = Vtheta[1], 0.0 
-# gen3[0,:] = Vtheta[2], 0.0
-Pm = Pbus[0]#Pe pre-fault 
-D = 1.0 ## does this need to be here
-gen1_params = [Pm, D]
+
+
+
 
 
 def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}, only send Vmag[gens] (create separate Emag array)
@@ -307,8 +261,8 @@ def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}, only send 
     return Pg
 
 #solve response during fault time 0,0.1s
-sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red),[0,1.5],
-                initGen[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
+sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
+                [0,1.5],initGen[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
 
 #Solve for rotor angle
 # sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0],t_eval=timepoints)
@@ -316,14 +270,24 @@ sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red),[0,1.5],
 # sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2],t_eval=timepoints)
 
 #  #plot speeds
-plt.plot(sol.t,sol.y[0,:])
-plt.plot(sol.t,sol.y[1,:])
-plt.plot(sol.t,sol.y[2,:])
+plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
+plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
+plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
 # plt.plot(sol_gen2.t,sol_gen2.y[0,:])
 # plt.plot(sol_gen3.t,sol_gen3.y[0,:])
 #plt.plot(t,response[:,1])
 plt.xlabel('time')
 plt.ylabel('Speed')
+plt.legend()
+plt.show()
+
+plt.plot(sol.t,sol.y[3,:],label='Gen1 delta')
+plt.plot(sol.t,sol.y[4,:],label='Gen2 delta')
+plt.plot(sol.t,sol.y[5,:],label='Gen3 delta')
+
+plt.xlabel('time')
+plt.ylabel('Rotor Angle')
+plt.legend()
 plt.show()
 
 
@@ -331,10 +295,6 @@ plt.show()
 # 
 
 
-#use this call to send arguments 
-gen1_w = solve_ivp(lambda t, y: (t,dWdt,Pm,Pe,D,dOmega,H),[0,1.5],[0.0],t_eval=timepoints)
-
-print(gen1_w)
 # #forward Euler Yn+1 = Yn + h*f(Tn,Yn)
 # h = 0.01 #step size
 # 
