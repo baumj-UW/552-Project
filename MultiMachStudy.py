@@ -18,6 +18,7 @@ from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
 from scipy.integrate import solve_ivp #ODE45 equiv (use this instead of odeint)
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
+from test.test_itertools import gen3
 
 #Define Constants
 
@@ -259,26 +260,29 @@ def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
 def gen_Model(t,y,Vmag,Ybus): #c is a placeholder for arguments 
     H = 10 #2*H*S/w_s 
     M = 0.6
-    Pm = 1.999 
+    Pm = 1.999 #<-- update to init condits 
     #Pe = 1.75
-    angles = [[y[1]],[y[3]],y[5]] #rotor angles 
-    omega = [[y[0]],[y[2]],y[4]] #speeds 
+#     angles = [[y[1]],[y[3]],y[5]] #rotor angles --> change index order and get rid of this
+#     omega = [[y[0]],[y[2]],y[4]] #speeds 
+    omega = y[0:NGEN]
+    delta = y[NGEN:]
+    
+    Pe = np.zeros((NGEN,1))
+    dWdt = np.zeros((NGEN,1))
     for gen in range(NGEN):
-        Pe[gen] = Pg_i(gen,Ybus,Vmag,angles)
-        dWdt[gen] = 1/M*(Pm - Pe[gen] - D*omega[gen]) #y[] index for array of derivs
-        #derivs[0,gen:gen+1] = dWdt[gen],omega[gen]  <-- add this later in place of last line
+        Pe[gen] = Pg_i(gen,Ybus,Vmag,delta)  
+        dWdt[gen] = 1/M*(Pm - Pe[gen] - D*omega[gen])  #Pm needs to be gen specific
  
-#     dWdt1 = 1/M*(Pm - Pe1 - D*y[0]) 
-#     dWdt2 = 1/M*(Pm - Pe2 - D*y[2]) #make gen specific
-#     dWdt3 = 1/M*(Pm - Pe3 - D*y[4]) #make gen specific
-    derivs = [dWdt[0],omega[0],dWdt[1],omega[1],dWdt[2],omega[2]]
+    derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2]] #simplify with concat[dWdt; omegas]
     return derivs
 
 
 # # Pre-fault initial condits and args --> send as an array to gen_Model 
+#Create array of initial generator conditions
+initGen = np.zeros((1,2*NGEN)) #[w1, w2, w3, delta1, delta2, delta3] w = 0
 for gen in range(NGEN):
-    initGen[0,gen:gen+1] ## init all the gens!
-gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] 
+    initGen[0,gen+NGEN]  = Vtheta[gen,0] 
+#gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0] 
 # gen2[0,:] = Vtheta[1], 0.0 
 # gen3[0,:] = Vtheta[2], 0.0
 Pm = Pbus[0]#Pe pre-fault 
@@ -286,7 +290,7 @@ D = 1.0 ## does this need to be here
 gen1_params = [Pm, D]
 
 
-def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}
+def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}, only send Vmag[gens] (create separate Emag array)
     Pg = 0.0    #init Pg to 0 then calc.
     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
     for gen_j in range(NGEN):
@@ -303,22 +307,23 @@ def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}
     return Pg
 
 #solve response during fault time 0,0.1s
-sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag,Yfault_red),[0,1.5],
-                gen1[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
+sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red),[0,1.5],
+                initGen[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
 
 #Solve for rotor angle
 # sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0],t_eval=timepoints)
 # sol_gen2 = solve_ivp(delta_hat,[0,1.5],Vtheta[1],t_eval=timepoints)
 # sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2],t_eval=timepoints)
 
-#  #plot rotor angles
+#  #plot speeds
 plt.plot(sol.t,sol.y[0,:])
 plt.plot(sol.t,sol.y[1,:])
+plt.plot(sol.t,sol.y[2,:])
 # plt.plot(sol_gen2.t,sol_gen2.y[0,:])
 # plt.plot(sol_gen3.t,sol_gen3.y[0,:])
 #plt.plot(t,response[:,1])
 plt.xlabel('time')
-plt.ylabel('Rotor Angle')
+plt.ylabel('Speed')
 plt.show()
 
 
