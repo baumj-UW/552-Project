@@ -18,13 +18,14 @@ from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
 from scipy.integrate import solve_ivp #ODE45 equiv (use this instead of odeint)
 import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying this later
-from test.test_itertools import gen3
+
 
 #Define Constants
 
 NGEN = 3 
 NBUS = 8
-
+F_CLEAR = 0.1 #Time at which the fault is cleared 
+END_SIM = 1.5 #End time of simulation 
 BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
                     [0,1,0,0,1,0,0,0],
                     [0,0,1,0,0,1,0,0],
@@ -39,6 +40,8 @@ LINE_YB = 0.01 #Line shunt admittance
 
 W_S = 2*math.pi*60 #synchronous speed 
 
+
+
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
 Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
@@ -50,8 +53,9 @@ M = np.zeros((NGEN,1))
 for gen in range(NGEN):
     M[gen] = 2*H[gen]*Sn/W_S
 
+# Initialize empty bus informaiton arrays <-- split Vmag/theta into V and E?
 Vmag = np.zeros((NBUS,1))   #vector of voltage magnitudes
-Vtheta = np.zeros((NBUS,1))  # vector of volt angles in degrees
+Vtheta = np.zeros((NBUS,2))  # array of volt angles in degrees [theta @ t=0, theta @ t=F_CLEAR]
 Pbus = np.zeros((NBUS,1)) #vector of P at each bus
 Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
@@ -59,9 +63,9 @@ Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
 
 #assign outputs from book solution 
-Vmag[NGEN:NBUS] = [[1.04],[1.02],[1.05],[0.9911],[1.0135]]
+Vmag[NGEN:NBUS] = np.array([[1.04],[1.02],[1.05],[0.9911],[1.0135]])
 ## Degrees Vtheta[NGEN:NBUS] = [[0.0],[-3.55],[-2.90],[-7.48],[-7.05]]
-Vtheta[NGEN:NBUS] = [[0.0],[-0.06196],[-0.05061],[-0.13055],[-0.12305]]
+Vtheta[NGEN:NBUS,0:1] = np.array([[0.0],[-0.06196],[-0.05061],[-0.13055],[-0.12305]])
 
 Pbus[0:NGEN] = [[1.9991],[0.6661],[1.600]]
 Qbus[0:NGEN] = [[0.8134],[0.2049],[1.051]]
@@ -157,9 +161,10 @@ def calcEi(Vmag,Vtheta,xd,P,Q):
     gen_angle = phase_it + Vtheta #internal gen angle in rad
     return Ei_mag,gen_angle
 
-Vmag[0], Vtheta[0] = calcEi(Vmag[4-1],Vtheta[4-1],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
-Vmag[1], Vtheta[1] = calcEi(Vmag[5-1],Vtheta[5-1],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
-Vmag[2], Vtheta[2] = calcEi(Vmag[6-1],Vtheta[6-1],Xd_trans[2],Pbus[3-1],Qbus[3-1])
+# Calculate internal gen voltages <-- this can be made more generic based on BUS_CONN
+Vmag[0], Vtheta[0,0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
+Vmag[1], Vtheta[1,0] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
+Vmag[2], Vtheta[2,0] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd_trans[2],Pbus[3-1],Qbus[3-1])
 
 # Step 4 cacluate prefault / fault / post fault admittance matrices 
 
@@ -194,10 +199,8 @@ Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
     # from 0.1 to  1.5s solve with post fault matrix  
 
 # #time points
-timepoints = np.linspace(0,1.5)  #change time steps 
- 
-#Calc speed deviation
-gen1 = np.zeros([np.size(timepoints),2])  #gen1 is an array of [rotor angles, speed deviatons] 
+fault_times = np.linspace(0,F_CLEAR)  #change time steps 
+postf_times = np.linspace(F_CLEAR,END_SIM)
 
 ##Derivative Functions
 # def dOmega_hat(t,dWdt,Pm,Pe,D,dOmega,H):
@@ -234,25 +237,18 @@ def gen_Model(t,y,Vmag,Ybus,Pm,M): #y is an array of [w1,w2,w3,d1,d2,d3]
     return derivs
 
 
-# # Pre-fault initial condits and args --> send as an array to gen_Model 
-#Create array of initial generator conditions
-initGen = np.zeros((1,2*NGEN)) #[w1, w2, w3, delta1, delta2, delta3] w = 0
-for gen in range(NGEN):
-    initGen[0,gen+NGEN]  = Vtheta[gen,0] 
 
 
 
-
-
-def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}, only send Vmag[gens] (create separate Emag array)
+def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}, only send Vmag[gens] (create separate Emag array)
     Pg = 0.0    #init Pg to 0 then calc.
     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
     for gen_j in range(NGEN):
         Gii = np.real(Ybus[gen_i,gen_i])
         Gij = np.real(Ybus[gen_i,gen_j])
         Bij = np.imag(Ybus[gen_i,gen_j])
-        di = Vtheta[gen_i]
-        dj = Vtheta[gen_j]
+        di = delta[gen_i]
+        dj = delta[gen_j]
         if gen_j == (gen_i):
             Pg += (Vmag[gen_i] ** 2) * Gii
         else:
@@ -260,14 +256,24 @@ def Pg_i (gen_i,Ybus,Vmag,Vtheta): #assume gens are numbered {0,1,2}, only send 
 
     return Pg
 
-#solve response during fault time 0,0.1s
-sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
-                [0,1.5],initGen[0,:],t_eval=timepoints)    #fix timepoints for appropriate range
 
-#Solve for rotor angle
-# sol = solve_ivp(delta_hat,[0, 1.5],Vtheta[0],t_eval=timepoints)
-# sol_gen2 = solve_ivp(delta_hat,[0,1.5],Vtheta[1],t_eval=timepoints)
-# sol_gen3 = solve_ivp(delta_hat,[0,1.5],Vtheta[2],t_eval=timepoints)
+# # Pre-fault initial condits and args --> send as an array to gen_Model 
+#Create array of initial generator conditions [pre-fault;postfault clear]
+initGen = np.zeros((2,2*NGEN)) #[w1, w2, w3, delta1, delta2, delta3] w = 0
+for gen in range(NGEN):
+    initGen[0,gen+NGEN]  = Vtheta[gen,0] 
+
+#solve response during fault time 0,0.1s
+sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
+                [0,F_CLEAR],initGen[0,:],t_eval=fault_times)    #fix timepoints for appropriate range
+
+## Set new init condits post fault clear
+for gen in range(NGEN):
+    initGen[1,gen] = sol.y[gen,len(sol.t)-1]#init condits include delta and speed
+    initGen[1,gen+NGEN] = sol.y[gen+NGEN,len(sol.t)-1]#Vtheta[gen,1]# fix thiss!!!
+
+sol_post = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
+                [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    #fix timepoints for appropriate range
 
 #  #plot speeds
 plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
@@ -290,6 +296,27 @@ plt.ylabel('Rotor Angle')
 plt.legend()
 plt.show()
 
+
+## Plot post fault clear <-- figure out how to combine with fault
+plt.plot(sol_post.t,sol_post.y[0,:],label='Gen1 w')
+plt.plot(sol_post.t,sol_post.y[1,:],label='Gen2 w')
+plt.plot(sol_post.t,sol_post.y[2,:],label='Gen3 w')
+# plt.plot(sol_post_gen2.t,sol_post_gen2.y[0,:])
+# plt.plot(sol_post_gen3.t,sol_post_gen3.y[0,:])
+#plt.plot(t,response[:,1])
+plt.xlabel('time')
+plt.ylabel('Speed')
+plt.legend()
+plt.show()
+
+plt.plot(sol_post.t,sol_post.y[3,:],label='Gen1 delta')
+plt.plot(sol_post.t,sol_post.y[4,:],label='Gen2 delta')
+plt.plot(sol_post.t,sol_post.y[5,:],label='Gen3 delta')
+
+plt.xlabel('time')
+plt.ylabel('Rotor Angle')
+plt.legend()
+plt.show()
 
 
 # 
