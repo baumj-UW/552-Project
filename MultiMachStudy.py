@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt  #refs this pointer as plt --> try simplifiying 
 
 NGEN = 3 
 NBUS = 8
+NLOAD = 2 #not currently used
 F_CLEAR = 0.1 #Time at which the fault is cleared 
 END_SIM = 1.5 #End time of simulation 
 BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
@@ -56,8 +57,6 @@ Vtheta = np.zeros((NBUS,2))  # array of volt angles in degrees [theta @ t=0, the
 Pbus = np.zeros((NBUS,1)) #vector of P at each bus
 Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
-# cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
-
 
 #assign outputs from book solution  <-- replace w/ NR solution 
 Vmag[NGEN:NBUS] = np.array([[1.04],[1.02],[1.05],[0.9911],[1.0135]])
@@ -88,22 +87,21 @@ for bus_i in range(0,NGEN):
 for bus_i in range(NGEN,NBUS):
     for bus_j in range(NGEN,NBUS):
         if np.logical_and(BUS_CONN[bus_i,bus_j],(bus_i != bus_j)):
-            Ybus_pre_B[bus_i,bus_j]= 1/LINE_XL
+            Ybus_pre_B[bus_i,bus_j] = 1/LINE_XL
 
 #System bus self admittances             
 for bus_i in range(NGEN,NBUS):
     Ybus_pre_B[bus_i,bus_i] = -1*np.sum(Ybus_pre_B[bus_i,:]) + LINE_YB*(np.sum(BUS_CONN[bus_i,NGEN:NBUS])-1)
 
 
-
-# use complexY = Ybus_pre_G + 1j*Ybus_pre_B
             
 #Calculate equiv gen bus E and delta
 #Create full augmented Ybus matrix (includes gen and load admittance)
 # Pre-fault: calc. from steady state augmented matrix
 # fault: Assume 3ph-g fault, set 
 
-## Calculate constant load bus admittances 
+### Step 2 Add model of load admittances 
+#Calculate constant load bus admittances and append Ybus
 # Load P and Q from solution <-- this will come from NR 
 Pbus[6] = 2.8653
 Qbus[6] = 1.2244
@@ -111,37 +109,24 @@ Qbus[6] = 1.2244
 Pbus[7] = 1.4
 Qbus[7] = 0.4
 
-
-#replace this with calculation from actual bus data 
+for load in range(6,8): # more generic way to iterate through loads?
+    Ybus_pre_G[load,load] += Pbus[load]/(Vmag[load] ** 2) 
+    Ybus_pre_B[load,load] -= Qbus[load]/(Vmag[load] ** 2)
+    
+#Create complex pre-fault Ybus    
+Ybus_pre = Ybus_pre_G + 1j*Ybus_pre_B
  
-Ybus_pre = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
-                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
-                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j, 10.0j],
-                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.0j, 10.0j, 10.0j],
-                    [0.0, 0.0, 0.0, 10.j, 10.0j, 10.0j, 2.917-31.217j, 0.0],
-                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex)  #append definition with dtype=complex
-
 #"remove" bus 7 during fault 
-Ybus_fault = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0],
-                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0],
-                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0],
-                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 0.0],
-                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j],
-                    [0.0, 0.0, 8.333j, 0.0, 0.0, -28.313j, 10.0j],
-                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 1.363-20.369j]], dtype = complex) 
+Ybus_fault = np.delete(Ybus_pre,6,0) #remove row 7 from Ybus
+Ybus_fault = np.delete(Ybus_fault,6,1) #remove column 7 from Ybus
 
-Ybus_post = np.array([[-12.5j, 0.0, 0.0, 12.5j, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, -5.556j, 0.0, 0.0, 5.556j, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, -8.333j, 0.0, 0.0, 8.333j, 0.0, 0.0],
-                    [12.5j, 0.0, 0.0, -32.48j, 10.0j, 0.0, 10.0j, 0.0],
-                    [0.0, 5.556j, 0.0, 10.0j, -35.526j, 0.0, 10.0j, 10.0j],
-                    [0.0, 0.0, 8.333j, 0.0, 0.0, -18.313j, 0.0, 10.0j],
-                    [0.0, 0.0, 0.0, 10.j, 10.0j, 0.0, 2.917-21.217j, 0.0],
-                    [0.0, 0.0, 0.0, 0.0, 10.0j, 10.0j, 0.0, 1.363-20.369j]], dtype = complex) 
+# Alter Ybus matrix post-fault, remove line 6-7
+Ybus_post = Ybus_pre
+Ybus_post[5,5] -= 1j*(LINE_YB - 1/LINE_XL) 
+Ybus_post[6,6] -= 1j*(LINE_YB - 1/LINE_XL) #
+Ybus_post[5,6] = 0.0
+Ybus_post[6,5] = 0.0
 
-# Step 2 Add model of load admittances
 
 # Step 3 calculate internal gen voltages
 # 2nd order model calc (following book example)
@@ -307,7 +292,7 @@ for delta in range(NGEN-1):
 plt.show()
     
 
-
+# cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
 
 ## plot concats
 # #  #plot speeds
