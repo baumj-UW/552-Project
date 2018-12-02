@@ -12,7 +12,6 @@ Machowski pdf p. 486, 3rd order model
 
 import math     # Math functions 
 import cmath    # Complex math function conj, rect
-import openpyxl # Methods to read and write xlsx files
 import numpy as np  # Methods for linear algebra
 from numpy.linalg import inv
 from scipy.integrate import odeint  #refs odeint directly instead of long pointer
@@ -40,8 +39,6 @@ LINE_YB = 0.01 #Line shunt admittance
 
 W_S = 2*math.pi*60 #synchronous speed 
 
-
-
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
 Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
@@ -55,14 +52,14 @@ for gen in range(NGEN):
 
 # Initialize empty bus informaiton arrays <-- split Vmag/theta into V and E?
 Vmag = np.zeros((NBUS,1))   #vector of voltage magnitudes
-Vtheta = np.zeros((NBUS,2))  # array of volt angles in degrees [theta @ t=0, theta @ t=F_CLEAR]
+Vtheta = np.zeros((NBUS,2))  # array of volt angles in degrees [theta @ t=0, theta @ t=F_CLEAR] <-- not needed
 Pbus = np.zeros((NBUS,1)) #vector of P at each bus
 Qbus = np.zeros((NBUS,1)) #vector of Q at each bus
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
 
 
-#assign outputs from book solution 
+#assign outputs from book solution  <-- replace w/ NR solution 
 Vmag[NGEN:NBUS] = np.array([[1.04],[1.02],[1.05],[0.9911],[1.0135]])
 ## Degrees Vtheta[NGEN:NBUS] = [[0.0],[-3.55],[-2.90],[-7.48],[-7.05]]
 Vtheta[NGEN:NBUS,0:1] = np.array([[0.0],[-0.06196],[-0.05061],[-0.13055],[-0.12305]])
@@ -105,6 +102,14 @@ for bus_i in range(NGEN,NBUS):
 #Create full augmented Ybus matrix (includes gen and load admittance)
 # Pre-fault: calc. from steady state augmented matrix
 # fault: Assume 3ph-g fault, set 
+
+## Calculate constant load bus admittances 
+# Load P and Q from solution <-- this will come from NR 
+Pbus[6] = 2.8653
+Qbus[6] = 1.2244
+
+Pbus[7] = 1.4
+Qbus[7] = 0.4
 
 
 #replace this with calculation from actual bus data 
@@ -269,8 +274,8 @@ fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:
 
 ## Set new init condits from fault solution 
 for gen in range(NGEN):
-    initGen[1,gen] = fault_sol.y[gen,len(fault_sol.t)-1]#init condits include delta and speed
-    initGen[1,gen+NGEN] = fault_sol.y[gen+NGEN,len(fault_sol.t)-1] 
+    initGen[1,gen] = fault_sol.y[gen,len(fault_sol.t)-1] #omega at F_CLEAR
+    initGen[1,gen+NGEN] = fault_sol.y[gen+NGEN,len(fault_sol.t)-1] #delta at F_CLEAR
 
 #solve response post fault clearing
 postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
@@ -293,63 +298,32 @@ for delta in range(NGEN,NGEN*2):
 
 plt.show()
 
+#Create relative rotor angle plot
+rel_delta = np.zeros((NGEN-1,len(sim_times)))
+for delta in range(NGEN-1):
+    rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
+    plt.plot(sim_times,rel_delta[delta,:])
+
+plt.show()
+    
+
+
+
 ## plot concats
-#  #plot speeds
-plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
-plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
-plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
-# plt.plot(sol_gen2.t,sol_gen2.y[0,:])
-# plt.plot(sol_gen3.t,sol_gen3.y[0,:])
-#plt.plot(t,response[:,1])
-plt.xlabel('time')
-plt.ylabel('Speed')
-plt.legend()
-plt.show()
+# #  #plot speeds
+# plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
+# plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
+# plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
+# # plt.plot(sol_gen2.t,sol_gen2.y[0,:])
+# # plt.plot(sol_gen3.t,sol_gen3.y[0,:])
+# #plt.plot(t,response[:,1])
+# plt.xlabel('time')
+# plt.ylabel('Speed')
+# plt.legend()
+# plt.show()
 
 #  #plot speeds
-plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
-plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
-plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
-# plt.plot(sol_gen2.t,sol_gen2.y[0,:])
-# plt.plot(sol_gen3.t,sol_gen3.y[0,:])
-#plt.plot(t,response[:,1])
-plt.xlabel('time')
-plt.ylabel('Speed')
-plt.legend()
-plt.show()
-
-plt.plot(sol.t,sol.y[3,:],label='Gen1 delta')
-plt.plot(sol.t,sol.y[4,:],label='Gen2 delta')
-plt.plot(sol.t,sol.y[5,:],label='Gen3 delta')
-
-plt.xlabel('time')
-plt.ylabel('Rotor Angle')
-plt.legend()
-plt.show()
-
-
-## Plot post fault clear <-- figure out how to combine with fault
-plt.plot(sol_post.t,sol_post.y[0,:],label='Gen1 w')
-plt.plot(sol_post.t,sol_post.y[1,:],label='Gen2 w')
-plt.plot(sol_post.t,sol_post.y[2,:],label='Gen3 w')
-# plt.plot(sol_post_gen2.t,sol_post_gen2.y[0,:])
-# plt.plot(sol_post_gen3.t,sol_post_gen3.y[0,:])
-#plt.plot(t,response[:,1])
-plt.xlabel('time')
-plt.ylabel('Speed')
-plt.legend()
-plt.show()
-
-plt.plot(sol_post.t,sol_post.y[3,:],label='Gen1 delta')
-plt.plot(sol_post.t,sol_post.y[4,:],label='Gen2 delta')
-plt.plot(sol_post.t,sol_post.y[5,:],label='Gen3 delta')
-
-plt.xlabel('time')
-plt.ylabel('Rotor Angle')
-plt.legend()
-plt.show()
-
-
+#plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
 # 
 
 
