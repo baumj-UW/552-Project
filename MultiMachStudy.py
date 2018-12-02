@@ -132,31 +132,56 @@ Ybus_post[6,5] = 0.0
 # 2nd order model calc (following book example)
 # Ei<delta = Vterm_mag + jXdi*(Pg-jQg)/Vterm 
 
+
+
 #change Ei to vector , def. xd
 #xd = 0.18
 #Ei = np.add((Vmag[5],np.multiply(Qbus[2],np.divide(xd[2]/Vmag[5])))) #+ (Pbus[2]*xd[2]/Vmag[5])*1j   
 
-def calcEi(Vmag,Vtheta,xd,P,Q):
-    a = xd * Q 
-    b = a / Vmag 
-    Ei_r = Vmag + b #real part
+def calcEf(Vmag,Vtheta,xf,P,Q): #pass in bus voltage, xf
     
-    c = P * xd 
-    Ei_i = c / Vmag #imag part
+    Ei_r = Vmag + xd*Q/Vmag #real part
+    
+    Ei_i = P*xd / Vmag #imag part
     
     Ei = Ei_r+Ei_i*1j
     #cmath.polar()Ei_r2+Ei_i2*1j
     Ei_mag = abs(Ei)
     phase_it = cmath.phase(Ei)  #angle between E and Vterm in rad
     gen_angle = phase_it + Vtheta #internal gen angle in rad
-    return Ei_mag,gen_angle
+    return Ei #send complex calc of E back 
+
+
+def calcEi(Vmag,Vtheta,xd,P,Q):
+    
+    Ei_r = Vmag + xd*Q/Vmag #real part
+    
+    Ei_i = P*xd / Vmag #imag part
+    
+    Ei = Ei_r+Ei_i*1j
+    #cmath.polar()Ei_r2+Ei_i2*1j
+    Ei_mag = abs(Ei)
+    phase_it = cmath.phase(Ei)  #angle between E and Vterm in rad
+    gen_angle = phase_it + Vtheta #internal gen angle in rad
+    return Ei #send complex calc of E back 
 
 # Calculate internal gen voltages <-- this can be made more generic based on BUS_CONN
-Vmag[0], Vtheta[0,0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
-Vmag[1], Vtheta[1,0] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
-Vmag[2], Vtheta[2,0] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd_trans[2],Pbus[3-1],Qbus[3-1])
+Eab = np.zeros((NGEN,1),dtype=complex)
 
-# Step 4 cacluate prefault / fault / post fault admittance matrices 
+Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
+Eab[1] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
+Eab[2] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd_trans[2],Pbus[3-1],Qbus[3-1])
+
+#put Emag and Etheta in 2nd order model format <-- remove once Edq calc complete
+for gen in range(NGEN):
+    Vmag[gen] = abs(Eab[gen])
+    Vtheta[gen,0] = cmath.phase(Eab[gen]) + Vtheta[gen+NGEN,0] #calcs actual prefault rotor angle <-- move above
+# Vmag[0], Vtheta[0,0] = abs(Eab[0]),cmath.phase(Eab[0])
+# Vmag[1], Vtheta[1,0] = abs(Eab[1]),cmath.phase(Eab[1])  
+# Vmag[2], Vtheta[2,0] = abs(Eab[2]),cmath.phase(Eab[2])
+
+# separate E from augmented Vbus
+#Eab = Vmag[0:NGEN,0],Vtheta[0:NGEN,0] 
 
 # Step 5 Kron reduction 
 # Yreduced = Ynn - Yns*(1/Yss)*Ysn
@@ -209,21 +234,30 @@ postf_times = np.linspace(F_CLEAR,END_SIM)
 #     return dEq_trans_dt
 
 def gen_Model(t,y,Vmag,Ybus,Pm,M): #y is an array of [w1,w2,w3,d1,d2,d3]
-    #H = 10 #2*H*S/w_s 
-    #M = 0.6
+    
     D = 0 ## Neglect Pd for 2nd order Model
-    #Pm = 1.999 #<-- Pm from Pbus init state 
+    TdoTran = 0.01 #Transient d-axis time const <-- find reasonable value
+    Ef = Vmag[0] #replace with actual calculation 
+    Id = Pm[0]/Vmag[0] #replace with actual calc
+    Xd = 0.08 #replace with actual calc??
+    XdTran = 0.08 #replace with actual calc?
 
     omega = y[0:NGEN]
-    delta = y[NGEN:]
+    delta = y[NGEN:2*NGEN]
+    EqTran = y[2*NGEN:3*NGEN]
     
     Pe = np.zeros((NGEN,1))
     dWdt = np.zeros((NGEN,1))
+    dEqTran = np.zeros((NGEN,1))
     for gen in range(NGEN):
+        #calc 
+        #calc new Ybus
         Pe[gen] = Pg_i(gen,Ybus,Vmag,delta)  
         dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  #
+        dEqTran[gen] = 1/TdoTran*(Ef - EqTran[gen] + Id*(Xd - XdTran))
  
-    derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2]] #simplify with concat[dWdt; omegas]
+    derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2],
+              dEqTran[0],dEqTran[1],dEqTran[2]] #simplify with concat[dWdt; omegas]
     return derivs
 
 
@@ -249,9 +283,10 @@ def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}, only send V
 
 # # Pre-fault initial condits and args --> send as an array to gen_Model 
 #Create array of initial generator conditions [pre-fault;postfault clear]
-initGen = np.zeros((2,2*NGEN)) #[w1, w2, w3, delta1, delta2, delta3] w = 0
+initGen = np.zeros((2,3*NGEN)) #[w1, w2, w3, delta1, delta2, delta3, EqTran..] w = 0
 for gen in range(NGEN):
     initGen[0,gen+NGEN]  = Vtheta[gen,0] 
+    #initGen[0,gen+2*NGEN] = 'init values of EqTran...'
 
 #solve response during fault time 0,0.1s
 fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
