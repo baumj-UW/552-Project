@@ -264,16 +264,47 @@ for gen in range(NGEN):
     initGen[0,gen+NGEN]  = Vtheta[gen,0] 
 
 #solve response during fault time 0,0.1s
-sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
-                [0,F_CLEAR],initGen[0,:],t_eval=fault_times)    #fix timepoints for appropriate range
+fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
+                [0,F_CLEAR],initGen[0,:],t_eval=fault_times)   
 
-## Set new init condits post fault clear
+## Set new init condits from fault solution 
 for gen in range(NGEN):
-    initGen[1,gen] = sol.y[gen,len(sol.t)-1]#init condits include delta and speed
-    initGen[1,gen+NGEN] = sol.y[gen+NGEN,len(sol.t)-1]#Vtheta[gen,1]# fix thiss!!!
+    initGen[1,gen] = fault_sol.y[gen,len(fault_sol.t)-1]#init condits include delta and speed
+    initGen[1,gen+NGEN] = fault_sol.y[gen+NGEN,len(fault_sol.t)-1] 
 
-sol_post = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
-                [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    #fix timepoints for appropriate range
+#solve response post fault clearing
+postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
+                [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
+
+
+# Combine solution results to plot <-- remove repeated time step at fault clear
+sim_times = np.concatenate((fault_sol.t,postf_sol.t))
+results = np.zeros((2*NGEN,len(sim_times))) #array of results [speed;delta]
+for omega in range(NGEN):
+    results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
+    plt.plot(sim_times,results[omega,:]) # add label to plots 
+
+#plt.plot(sol_time,sol_all,label='Gen1 w')
+plt.show()
+
+for delta in range(NGEN,NGEN*2):
+    results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
+    plt.plot(sim_times,results[delta,:]) # add label to plots
+
+plt.show()
+
+## plot concats
+#  #plot speeds
+plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
+plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
+plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
+# plt.plot(sol_gen2.t,sol_gen2.y[0,:])
+# plt.plot(sol_gen3.t,sol_gen3.y[0,:])
+#plt.plot(t,response[:,1])
+plt.xlabel('time')
+plt.ylabel('Speed')
+plt.legend()
+plt.show()
 
 #  #plot speeds
 plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
