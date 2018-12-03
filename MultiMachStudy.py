@@ -220,7 +220,17 @@ def abTdq(delta): #returns (a,b) (d,q) transform matrix
                  [math.cos(delta),math.sin(delta)]])
     return T
 
-#Estimate values for Ed_f,Eq_f
+
+#Initial guess of Xf and X'q (x'd given)
+Xq_trans = 0.5*Xd_trans
+Xf = 0.5*(Xd_trans + Xq_trans) 
+
+# Get estimate of Eab (not sure if this is valid) using Ef
+Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xf[0],Pbus[1-1],Qbus[1-1]) 
+Eab[1] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xf[1],Pbus[2-1],Qbus[2-1])  
+Eab[2] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xf[2],Pbus[3-1],Qbus[3-1])
+
+#Estimate values for Ed_f,Eq_f --> this should be done with Xf from above
 # Start w/ Ed_f = Eq_f = Ef from fault # guessing Edq = Eab w/o rotor angle adjustment..?
 Edq_f = np.zeros((NGEN,2)) #Array of [Ed_f, Eq_f], rows correspond to gens
 Eab_v = np.zeros((NGEN,2)) #array of [Ea, Eb], rows correspond to gens
@@ -255,6 +265,14 @@ def Ig(Ybus,Eab,deltaT):
 #Iteration to solve Edq process
 Ig_dq_l = Ig(Yfault_red,Eab_v,deltaT) #Idq at iteration l
 
+#Correct the Edq values for next iteration step 
+#Edq(l+1) = E'dq - (Xq_trans - Xf)
+for gen in range(NGEN):
+    mismatch_d = (Xq_trans[gen]-Xf[gen])*Ig_dq_l[gen,1]
+    mismatch_q = (Xd_trans[gen]-Xf[gen])*Ig_dq_l[gen,0]
+    Edq_f[gen,0] += mismatch_d
+    Edq_f[gen,1] -= mismatch_q
+    
 
 # #time points
 fault_times = np.linspace(0,F_CLEAR)  #change time steps 
@@ -329,7 +347,7 @@ def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}, only send V
 initGen = np.zeros((2,3*NGEN)) #[w1, w2, w3, delta1, delta2, delta3, EqTran..] w = 0
 for gen in range(NGEN):
     initGen[0,gen+NGEN]  = Vtheta[gen,0] 
-    #initGen[0,gen+2*NGEN] = 'init values of EqTran...'
+    #initGen[0,gen+2*NGEN] = 'init values of EqTran...' from internal emf calcs?
 
 #solve response during fault time 0,0.1s
 fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
