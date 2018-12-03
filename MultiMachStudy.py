@@ -166,7 +166,8 @@ def calcEi(Vmag,Vtheta,xd,P,Q):
     return Ei #send complex calc of E back 
 
 # Calculate internal gen voltages <-- this can be made more generic based on BUS_CONN
-Eab = np.zeros((NGEN,1),dtype=complex)
+Eab = np.zeros((NGEN,1),dtype=complex) 
+
 
 Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
 Eab[1] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd_trans[1],Pbus[2-1],Qbus[2-1])  
@@ -197,6 +198,7 @@ def kronRed(Y,n,s):
 Ypre_red = kronRed(Ybus_pre,NGEN,NBUS)
 Yfault_red = kronRed(Ybus_fault,NGEN,NBUS)
 Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
+
 #===============================================================================
 # Solve Equations with scscipy.integrate.solve_ivp(f) --> NOT WORKING
 # Solve Equations with Forward Euler
@@ -212,6 +214,39 @@ Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
     # init w/ pre-fault condits
     # from 0 to 0.1 solve with fault matrix
     # from 0.1 to  1.5s solve with post fault matrix  
+    
+def T(delta): #returns (a,b) (d,q) transform matrix
+    T = np.array([[-math.sin(delta),math.cos(delta)],
+                 [math.cos(delta),math.sin(delta)]])
+    return T
+
+#Estimate values for Ed_f,Eq_f
+# Start w/ Ed_f = Eq_f = Ef from fault 
+Edq_f = np.zeros((NGEN,2)) #Array of [Ed_f, Eq_f], rows correspond to gens
+Eab_v = np.zeros((NGEN,2)) #array of [Ea, Eb], rows correspond to gens
+for gen in range(NGEN):
+    Eab_v[gen,:] = np.array([[np.real(Eab[gen,0]), np.imag(Eab[gen,0])]])
+    Edq_f[gen,:] = np.dot(T(Vtheta[gen+NGEN,0]),Eab_v[gen,:].T).T
+
+#Calculate generator currents
+#Ig = np.dot(Yfault_red,Eab_v[gen,:].T) 
+ #constant load admittance, expect Eab as a row [Ea, Eb] per gen
+ # Eab should be TRANSIENT emf 
+def Ig(Ybus,Eab):
+    Ig = np.zeros((NGEN,2))
+    for gen_i in range(NGEN):
+        Ea = Eab[gen_i,0]
+        Eb = Eab[gen_i,1]
+        for gen_j in range(NGEN):
+            Gij = np.real(Ybus[gen_i,gen_j])
+            Bij = np.imag(Ybus[gen_i,gen_j])
+            Ig[gen_i,0] += Gij*Ea - Bij*Eb
+            Ig[gen_i,1] += Gij*Eb + Bij*Ea 
+       
+    return Ig #returns (NGENx2) array of [Ia,Ib] per gen
+
+Ig_test = Ig(Yfault_red,Eab_v)
+
 
 # #time points
 fault_times = np.linspace(0,F_CLEAR)  #change time steps 
