@@ -215,37 +215,45 @@ Ypost_red = kronRed(Ybus_post,NGEN,NBUS)
     # from 0 to 0.1 solve with fault matrix
     # from 0.1 to  1.5s solve with post fault matrix  
     
-def T(delta): #returns (a,b) (d,q) transform matrix
+def abTdq(delta): #returns (a,b) (d,q) transform matrix
     T = np.array([[-math.sin(delta),math.cos(delta)],
                  [math.cos(delta),math.sin(delta)]])
     return T
 
 #Estimate values for Ed_f,Eq_f
-# Start w/ Ed_f = Eq_f = Ef from fault 
+# Start w/ Ed_f = Eq_f = Ef from fault # guessing Edq = Eab w/o rotor angle adjustment..?
 Edq_f = np.zeros((NGEN,2)) #Array of [Ed_f, Eq_f], rows correspond to gens
 Eab_v = np.zeros((NGEN,2)) #array of [Ea, Eb], rows correspond to gens
+deltaT = np.zeros((NGEN,1)) #array of rotor angles to use in transform 
 for gen in range(NGEN):
+    deltaT[gen] = cmath.phase(Eab[gen]) + Vtheta[gen+NGEN,0] #actual init rotor angle 
     Eab_v[gen,:] = np.array([[np.real(Eab[gen,0]), np.imag(Eab[gen,0])]])
-    Edq_f[gen,:] = np.dot(T(Vtheta[gen+NGEN,0]),Eab_v[gen,:].T).T
+    Edq_f[gen,:] = np.dot(abTdq(deltaT[gen]),Eab_v[gen,:].T).T
 
 #Calculate generator currents
-#Ig = np.dot(Yfault_red,Eab_v[gen,:].T) 
- #constant load admittance, expect Eab as a row [Ea, Eb] per gen
+ #constant load admittance, expect Eab as a row [Ea, Eb] per gen 
  # Eab should be TRANSIENT emf 
-def Ig(Ybus,Eab):
-    Ig = np.zeros((NGEN,2))
+ # deltaT is array of rotor angles for dq transform --> use from changing calc?
+def Ig(Ybus,Eab,deltaT):
+    Ig_ab = np.zeros((NGEN,2))
+    Ig_dq = np.zeros((NGEN,2))
     for gen_i in range(NGEN):
         Ea = Eab[gen_i,0]
         Eb = Eab[gen_i,1]
         for gen_j in range(NGEN):
             Gij = np.real(Ybus[gen_i,gen_j])
             Bij = np.imag(Ybus[gen_i,gen_j])
-            Ig[gen_i,0] += Gij*Ea - Bij*Eb
-            Ig[gen_i,1] += Gij*Eb + Bij*Ea 
-       
-    return Ig #returns (NGENx2) array of [Ia,Ib] per gen
+            Ig_ab[gen_i,0] += Gij*Ea - Bij*Eb
+            Ig_ab[gen_i,1] += Gij*Eb + Bij*Ea 
+        
+        #convert Iab to Idq
+        Ig_dq[gen_i,:] = np.dot(abTdq(deltaT[gen_i]),Ig_ab[gen_i,:].T)
+        # 
+        
+    return Ig_dq #returns (NGENx2) array of [Ia,Ib] per gen
 
-Ig_test = Ig(Yfault_red,Eab_v)
+#Iteration to solve Edq process
+Ig_dq_l = Ig(Yfault_red,Eab_v,deltaT) #Idq at iteration l
 
 
 # #time points
