@@ -43,9 +43,9 @@ W_S = 2*math.pi*60 #synchronous speed
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
 Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
-Xd = np.array([[0.80, 0.08],
-             [1.80, 0.18],
-             [1.2, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
+Xd = np.array([[0.4, 0.08],
+             [0.9, 0.18],
+             [0.6, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
 
 # Step 1 - Convert to common base (already done for this project) 
 
@@ -302,7 +302,7 @@ postf_times = np.linspace(F_CLEAR,END_SIM)
 def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d2,d3,Eq...]
     
     D = 0 ## Neglect Pd for 2nd order Model
-    TdoTran = 0.6 #Transient d-axis time const <-- find reasonable value
+    TdoTran = 1.2 #Transient d-axis time const <-- find reasonable value
     #Ef = Vmag[0] #replace with actual calculation 
     Id = Pm[0]/Vmag[0] #replace with actual calc
     #Xd = 0.80 #replace with actual calc??
@@ -322,7 +322,7 @@ def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d
     for gen in range(NGEN):
         #calc 
         #calc new Ybus
-        Pe[gen] = Pg_i(gen,Ybus,Vmag,delta) 
+        Pe[gen] = Pg_i(gen,Ybus,Vmag,delta)  #PASS CHANGING EMAG INSTEAD OF VMAG
         #Id[gen] = Ig(Ybus,Eab,deltaT) 
         dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  #
         dEqTran[gen] = 1/TdoTran*(Ef[gen] - EqTran[gen] + Idq[gen,0]*(Xd[gen,0] - Xd[gen,1])) # Xd columns [Xd, X'd]
@@ -372,35 +372,36 @@ postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:N
                 [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
 
 
+
+figs = plt.figure(1)
 # Combine solution results to plot <-- remove repeated time step at fault clear
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
 results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
 for omega in range(NGEN):
     results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
+    plt.subplot(4,1,1) #first subplot in figs
     plt.plot(sim_times,results[omega,:]) # add label to plots 
-
-#plt.plot(sol_time,sol_all,label='Gen1 w')
-plt.show()
 
 for delta in range(NGEN,NGEN*2):
     results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
+    plt.subplot(4,1,2) #2nd subplot in figs
     plt.plot(sim_times,results[delta,:]) # add label to plots
 
-plt.show()
 
 #Create relative rotor angle plot
 rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
+    plt.subplot(4,1,3) #3rd subplot in figs
     plt.plot(sim_times,rel_delta[delta,:])
 
-plt.show()
-
+#Create Eq plot
 for Eq in range(NGEN*2,NGEN*3):
     results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
+    plt.subplot(4,1,4) #4th subplot in figs
     plt.plot(sim_times,results[Eq,:]) # add label to plots
 
-plt.show()
+plt.show(figs)
     
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
