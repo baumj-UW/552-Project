@@ -43,6 +43,9 @@ W_S = 2*math.pi*60 #synchronous speed
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
 Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
+Xd = np.array([[0.80, 0.08],
+             [1.80, 0.18],
+             [1.2, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
 
 # Step 1 - Convert to common base (already done for this project) 
 
@@ -162,11 +165,12 @@ def calcEi(Vmag,Vtheta,xd,P,Q):
     #cmath.polar()Ei_r2+Ei_i2*1j
     Ei_mag = abs(Ei)
     phase_it = cmath.phase(Ei)  #angle between E and Vterm in rad
-    gen_angle = phase_it + Vtheta #internal gen angle in rad
+    gen_angle = phase_it + Vtheta #internal gen angle in rad  <-- THIS ISN'T GETTING USED IN CALC, FIX!
     return Ei #send complex calc of E back 
 
 # Calculate internal gen voltages <-- this can be made more generic based on BUS_CONN
 Eab = np.zeros((NGEN,1),dtype=complex) 
+Ef = np.zeros((NGEN,1)) #Ef for E'd calc, constant set to init Eab magnitude 
 
 
 Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd_trans[0],Pbus[1-1],Qbus[1-1]) 
@@ -176,6 +180,7 @@ Eab[2] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd_trans[2],Pbus[3-1],Qbus[3-1])
 #put Emag and Etheta in 2nd order model format <-- remove once Edq calc complete
 for gen in range(NGEN):
     Vmag[gen] = abs(Eab[gen])
+    Ef[gen] = abs(Eab[gen])
     Vtheta[gen,0] = cmath.phase(Eab[gen]) + Vtheta[gen+NGEN,0] #calcs actual prefault rotor angle <-- move above
 # Vmag[0], Vtheta[0,0] = abs(Eab[0]),cmath.phase(Eab[0])
 # Vmag[1], Vtheta[1,0] = abs(Eab[1]),cmath.phase(Eab[1])  
@@ -244,12 +249,12 @@ for gen in range(NGEN):
  #constant load admittance, expect Eab as a row [Ea, Eb] per gen 
  # Eab should be TRANSIENT emf 
  # deltaT is array of rotor angles for dq transform --> use from changing calc?
-def Ig(Ybus,Eab,deltaT):
+def Ig(Ybus,Edq,deltaT):   #takes E'dq and returns Idq 
     Ig_ab = np.zeros((NGEN,2))
     Ig_dq = np.zeros((NGEN,2))
     for gen_i in range(NGEN):
-        Ea = Eab[gen_i,0]
-        Eb = Eab[gen_i,1]
+        # dq to ab for current calc on common axis
+        Ea,Eb = np.dot(abTdq(deltaT[gen_i]),Edq[gen_i,:].T)
         for gen_j in range(NGEN):
             Gij = np.real(Ybus[gen_i,gen_j])
             Bij = np.imag(Ybus[gen_i,gen_j])
@@ -263,7 +268,7 @@ def Ig(Ybus,Eab,deltaT):
     return Ig_dq #returns (NGENx2) array of [Ia,Ib] per gen
 
 #Iteration to solve Edq process
-Ig_dq_l = Ig(Yfault_red,Eab_v,deltaT) #Idq at iteration l
+Ig_dq_l = Ig(Yfault_red,Edq_f,deltaT) #Idq at iteration l
 
 #Correct the Edq values for next iteration step 
 #Edq(l+1) = E'dq - (Xq_trans - Xf)
@@ -294,18 +299,22 @@ postf_times = np.linspace(F_CLEAR,END_SIM)
 # def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
 #     return dEq_trans_dt
 
-def gen_Model(t,y,Vmag,Ybus,Pm,M): #y is an array of [w1,w2,w3,d1,d2,d3]
+def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d2,d3,Eq...]
     
     D = 0 ## Neglect Pd for 2nd order Model
-    TdoTran = 0.01 #Transient d-axis time const <-- find reasonable value
-    Ef = Vmag[0] #replace with actual calculation 
+    TdoTran = 0.6 #Transient d-axis time const <-- find reasonable value
+    #Ef = Vmag[0] #replace with actual calculation 
     Id = Pm[0]/Vmag[0] #replace with actual calc
-    Xd = 0.08 #replace with actual calc??
-    XdTran = 0.08 #replace with actual calc?
+    #Xd = 0.80 #replace with actual calc??
+    #XdTran = 0.08 #replace with actual calc?
 
     omega = y[0:NGEN]
     delta = y[NGEN:2*NGEN]
     EqTran = y[2*NGEN:3*NGEN]
+    
+    #Use Edq to find Idq
+    Edq = np.array([[EdTran],[EqTran]]).T
+    Idq = Ig(Ybus,Edq,delta.T) #returns [Id, Iq] for all gens
     
     Pe = np.zeros((NGEN,1))
     dWdt = np.zeros((NGEN,1))
@@ -313,16 +322,14 @@ def gen_Model(t,y,Vmag,Ybus,Pm,M): #y is an array of [w1,w2,w3,d1,d2,d3]
     for gen in range(NGEN):
         #calc 
         #calc new Ybus
-        Pe[gen] = Pg_i(gen,Ybus,Vmag,delta)  
+        Pe[gen] = Pg_i(gen,Ybus,Vmag,delta) 
+        #Id[gen] = Ig(Ybus,Eab,deltaT) 
         dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  #
-        dEqTran[gen] = 1/TdoTran*(Ef - EqTran[gen] + Id*(Xd - XdTran))
+        dEqTran[gen] = 1/TdoTran*(Ef[gen] - EqTran[gen] + Idq[gen,0]*(Xd[gen,0] - Xd[gen,1])) # Xd columns [Xd, X'd]
  
     derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2],
               dEqTran[0],dEqTran[1],dEqTran[2]] #simplify with concat[dWdt; omegas]
     return derivs
-
-
-
 
 
 def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}, only send Vmag[gens] (create separate Emag array)
@@ -346,26 +353,28 @@ def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}, only send V
 #Create array of initial generator conditions [pre-fault;postfault clear]
 initGen = np.zeros((2,3*NGEN)) #[w1, w2, w3, delta1, delta2, delta3, EqTran..] w = 0
 for gen in range(NGEN):
-    initGen[0,gen+NGEN]  = Vtheta[gen,0] 
-    #initGen[0,gen+2*NGEN] = 'init values of EqTran...' from internal emf calcs?
-
+    initGen[0,gen+NGEN]  = deltaT[gen,0] 
+    initGen[0,gen+2*NGEN] = Edq_f[gen,1] # 'init values of EqTran...' from internal emf calcs?
+    #initGen[0,gen+3*NGEN] = Edq_f[gen,0] # init values of EdTran for 4th order
+    
 #solve response during fault time 0,0.1s
-fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M),
+fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Yfault_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0]),
                 [0,F_CLEAR],initGen[0,:],t_eval=fault_times)   
 
 ## Set new init condits from fault solution 
 for gen in range(NGEN):
     initGen[1,gen] = fault_sol.y[gen,len(fault_sol.t)-1] #omega at F_CLEAR
     initGen[1,gen+NGEN] = fault_sol.y[gen+NGEN,len(fault_sol.t)-1] #delta at F_CLEAR
+    initGen[1,gen+2*NGEN] = fault_sol.y[gen+2*NGEN,len(fault_sol.t)-1] #EqTran at F_CLEAR
 
 #solve response post fault clearing
-postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M),
+postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0]),
                 [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
 
 
 # Combine solution results to plot <-- remove repeated time step at fault clear
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
-results = np.zeros((2*NGEN,len(sim_times))) #array of results [speed;delta]
+results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
 for omega in range(NGEN):
     results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
     plt.plot(sim_times,results[omega,:]) # add label to plots 
@@ -384,6 +393,12 @@ rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
     plt.plot(sim_times,rel_delta[delta,:])
+
+plt.show()
+
+for Eq in range(NGEN*2,NGEN*3):
+    results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
+    plt.plot(sim_times,results[Eq,:]) # add label to plots
 
 plt.show()
     
