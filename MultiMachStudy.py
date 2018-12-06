@@ -286,7 +286,7 @@ def Ig(Ybus,Edq,deltaT):   #takes E'dq and returns Idq
 
 # #time points
 fault_times = np.linspace(0,F_CLEAR)  #change time steps 
-postf_times = np.linspace(F_CLEAR,END_SIM)
+postf_times = np.linspace(F_CLEAR,END_SIM,round(END_SIM/0.005))
 
 ##Derivative Functions
 # def dOmega_hat(t,dWdt,Pm,Pe,D,dOmega,H):
