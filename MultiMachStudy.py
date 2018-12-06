@@ -307,7 +307,7 @@ postf_times = np.linspace(F_CLEAR,END_SIM)
 def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d2,d3,Eq...]
     
     D = 0 ## Neglect Pd for 2nd order Model
-    TdoTran = 1.2 #Transient d-axis time const <-- find reasonable value
+    TdoTran = 1.5 #Transient d-axis time const <-- find reasonable value
     #Ef = Vmag[0] #replace with actual calculation 
     #Id = Pm[0]/Vmag[0] #replace with actual calc
     #Xd = 0.80 #replace with actual calc??
@@ -387,26 +387,37 @@ results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
 for omega in range(NGEN):
     results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
     plt.subplot(2,2,1) #first subplot in figs
-    plt.plot(sim_times,results[omega,:]) # add label to plots 
+    plt.plot(sim_times,(results[omega,:]+W_S)/W_S) # add label to plots    
+plt.xlabel('Time (sec)')
+plt.ylabel('Rotor Speed (pu)')
+plt.grid(True)
 
 for delta in range(NGEN,NGEN*2):
     results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
     plt.subplot(2,2,2) #2nd subplot in figs
-    plt.plot(sim_times,results[delta,:]) # add label to plots
-
+    plt.plot(sim_times,(180/math.pi)*results[delta,:]) # add label to plots
+plt.xlabel('Time (sec)')
+plt.ylabel('Rotor Angle (deg)')
+plt.grid(True)
 
 #Create relative rotor angle plot
 rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
     plt.subplot(2,2,3) #3rd subplot in figs
-    plt.plot(sim_times,rel_delta[delta,:])
+    plt.plot(sim_times,(180/math.pi)*rel_delta[delta,:])
+plt.xlabel('Time (sec)')
+plt.ylabel('Relative Rotor Angles (deg)')
+plt.grid(True)
 
 #Create Eq plot
 for Eq in range(NGEN*2,NGEN*3):
     results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
     plt.subplot(2,2,4) #4th subplot in figs
     plt.plot(sim_times,results[Eq,:]) # add label to plots
+plt.xlabel('Time (sec)')
+plt.ylabel("E'q (pu)")
+plt.grid(True)
 
 plt.show(figs)
     
