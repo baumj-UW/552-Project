@@ -46,6 +46,7 @@ Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
 Xd = np.array([[0.4, 0.08],
              [0.9, 0.18],
              [0.6, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
+Tdo = np.array([[1.2],[1.4],[1.5]]) #Open circuit time constants T'do
 
 # Step 1 - Convert to common base (already done for this project) 
 
@@ -304,10 +305,10 @@ postf_times = np.linspace(F_CLEAR,END_SIM,round(END_SIM/0.005))
 # def emfTransD_hat(Ef,Ed_trans,Iq,Xq,Xq_trans,Tqo_trans):
 #     return dEq_trans_dt
 
-def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d2,d3,Eq...]
+def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran,Tdo): #y is an array of [w1,w2,w3,d1,d2,d3,Eq...]
     
     D = 0 ## Neglect Pd for 2nd order Model
-    TdoTran = 1.5 #Transient d-axis time const <-- find reasonable value
+    #TdoTran = 1.5 #Transient d-axis time const <-- find reasonable value
     #Ef = Vmag[0] #replace with actual calculation 
     #Id = Pm[0]/Vmag[0] #replace with actual calc
     #Xd = 0.80 #replace with actual calc??
@@ -332,7 +333,7 @@ def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran): #y is an array of [w1,w2,w3,d1,d
         Pe[gen] = Pg_i(gen,Ybus,Emag,delta)  #PASS CHANGING EMAG INSTEAD OF VMAG
         #Id[gen] = Ig(Ybus,Eab,deltaT) 
         dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  #
-        dEqTran[gen] = 1/TdoTran*(Ef[gen] - EqTran[gen] + Idq[gen,0]*(Xd[gen,0] - Xd[gen,1])) # Xd columns [Xd, X'd]
+        dEqTran[gen] = 1/Tdo[gen]*(Ef[gen] - EqTran[gen] + Idq[gen,0]*(Xd[gen,0] - Xd[gen,1])) # Xd columns [Xd, X'd]
  
     derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2],
               dEqTran[0],dEqTran[1],dEqTran[2]] #simplify with concat[dWdt; omegas]
@@ -365,7 +366,7 @@ for gen in range(NGEN):
     #initGen[0,gen+3*NGEN] = Edq_f[gen,0] # init values of EdTran for 4th order
     
 #solve response during fault time 0,0.1s  MAKE SURE Vmag IS SET PROPERLY
-fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Yfault_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0]),
+fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Yfault_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0],Tdo),
                 [0,F_CLEAR],initGen[0,:],t_eval=fault_times)   
 
 ## Set new init condits from fault solution 
@@ -375,7 +376,7 @@ for gen in range(NGEN):
     initGen[1,gen+2*NGEN] = fault_sol.y[gen+2*NGEN,len(fault_sol.t)-1] #EqTran at F_CLEAR
 
 #solve response post fault clearing
-postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0]),
+postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0],Tdo),
                 [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
 
 
@@ -385,19 +386,24 @@ figs = plt.figure(1)
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
 results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
 for omega in range(NGEN):
-    results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
+    results[omega,:] = np.concatenate((fault_sol.y[omega,:],
+                                       postf_sol.y[omega,:]),axis=0)
     plt.subplot(2,2,1) #first subplot in figs
-    plt.plot(sim_times,(results[omega,:]+W_S)/W_S) # add label to plots    
+    plt.plot(sim_times,(results[omega,:]+W_S)/W_S,
+             label='Gen '+str(omega+1)) # add label to plots    
 plt.xlabel('Time (sec)')
 plt.ylabel('Rotor Speed (pu)')
+plt.legend()
 plt.grid(True)
 
 for delta in range(NGEN,NGEN*2):
     results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
     plt.subplot(2,2,2) #2nd subplot in figs
-    plt.plot(sim_times,(180/math.pi)*results[delta,:]) # add label to plots
+    plt.plot(sim_times,(180/math.pi)*results[delta,:],
+             label='Gen '+str(delta-NGEN+1)) # add label to plots
 plt.xlabel('Time (sec)')
 plt.ylabel('Rotor Angle (deg)')
+plt.legend()
 plt.grid(True)
 
 #Create relative rotor angle plot
@@ -405,18 +411,20 @@ rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
     plt.subplot(2,2,3) #3rd subplot in figs
-    plt.plot(sim_times,(180/math.pi)*rel_delta[delta,:])
+    plt.plot(sim_times,(180/math.pi)*rel_delta[delta,:],label='$\delta$'+str(delta+2)+'1')
 plt.xlabel('Time (sec)')
 plt.ylabel('Relative Rotor Angles (deg)')
+plt.legend()
 plt.grid(True)
 
 #Create Eq plot
 for Eq in range(NGEN*2,NGEN*3):
     results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
     plt.subplot(2,2,4) #4th subplot in figs
-    plt.plot(sim_times,results[Eq,:]) # add label to plots
+    plt.plot(sim_times,results[Eq,:],label='Gen '+str(Eq-NGEN*2+1)) # add label to plots
 plt.xlabel('Time (sec)')
 plt.ylabel("E'q (pu)")
+plt.legend()
 plt.grid(True)
 
 plt.show(figs)
