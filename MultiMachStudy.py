@@ -42,10 +42,10 @@ W_S = 2*math.pi*60 #synchronous speed
 
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
-Xd_trans = np.array([[0.08],[0.18],[0.12]]) #transient reactance from book table
 Xd = np.array([[0.4, 0.08],
              [0.9, 0.18],
              [0.6, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
+Xd = Xd/5 #test adjustment of Xd to match text example powerflow calcs
 Tdo = np.array([[1.2],[1.4],[1.5]]) #Open circuit time constants T'do
 
 # Step 1 - Convert to common base (already done for this project) 
@@ -225,7 +225,7 @@ def Ig(Ybus,Edq,deltaT):   #takes E'dq and returns Idq
 fault_times = np.linspace(0,F_CLEAR,round(F_CLEAR/0.005))  
 postf_times = np.linspace(F_CLEAR,END_SIM,round((END_SIM-F_CLEAR)/0.005))
 
-
+#remove Vmag from inputs, not needed for 3rd order
 def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran,Tdo): #y is an array of state variables [w,delta,E'q]
     
     D = 0.0 ## Neglect Pd for 2nd order Model
