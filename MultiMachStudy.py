@@ -267,29 +267,44 @@ postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,Vmag[0:NGEN],Ypost_red,Pbus[0:N
                 [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
 
 
+
+figs = plt.figure(1)
 # Combine solution results to plot <-- remove repeated time step at fault clear
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
 results = np.zeros((2*NGEN,len(sim_times))) #array of results [speed;delta]
 for omega in range(NGEN):
-    results[omega,:] = np.concatenate((fault_sol.y[omega,:],postf_sol.y[omega,:]),axis=0)
-    plt.plot(sim_times,results[omega,:]) # add label to plots 
-
-#plt.plot(sol_time,sol_all,label='Gen1 w')
-plt.show()
+    results[omega,:] = np.concatenate((fault_sol.y[omega,:],
+                                       postf_sol.y[omega,:]),axis=0)
+    plt.subplot(2,2,1) #first subplot in figs
+    plt.plot(sim_times,(results[omega,:]+W_S)/W_S,
+             label='Gen '+str(omega+1)) # add label to plots    
+plt.xlabel('Time (sec)')
+plt.ylabel('Rotor Speed (pu)')
+plt.legend()
+plt.grid(True)
 
 for delta in range(NGEN,NGEN*2):
     results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
-    plt.plot(sim_times,results[delta,:]) # add label to plots
-
-plt.show()
+    plt.subplot(2,2,2) #2nd subplot in figs
+    plt.plot(sim_times,(180/math.pi)*results[delta,:],
+             label='Gen '+str(delta-NGEN+1)) # add label to plots
+plt.xlabel('Time (sec)')
+plt.ylabel('Rotor Angle (deg)')
+plt.legend()
+plt.grid(True)
 
 #Create relative rotor angle plot
 rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
-    plt.plot(sim_times,rel_delta[delta,:])
+    plt.subplot(2,2,3) #3rd subplot in figs
+    plt.plot(sim_times,(180/math.pi)*rel_delta[delta,:],label='$\delta$'+str(delta+2)+'1')
+plt.xlabel('Time (sec)')
+plt.ylabel('Relative Rotor Angles (deg)')
+plt.legend()
+plt.grid(True)
 
-plt.show()
+plt.show(figs)
     
 
 # cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
