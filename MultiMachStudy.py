@@ -25,7 +25,7 @@ NGEN = 3
 NBUS = 8
 NLOAD = 2 #not currently used
 F_CLEAR = 0.1 #Time at which the fault is cleared 
-END_SIM = 1.5 #End time of simulation 
+END_SIM = 5 #End time of simulation 
 BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
                     [0,1,0,0,1,0,0,0],
                     [0,0,1,0,0,1,0,0],
@@ -81,11 +81,11 @@ for bus_i in range(0,NGEN):
     for bus_j in range(0,NBUS):
         if BUS_CONN[bus_i,bus_j]:
            if bus_i == bus_j:
-               Ybus_pre_B[bus_i,bus_j] = -1/Xd[bus_i,1]  #using X'd to calc --> should this be Xd?
-               Ybus_pre_B[bus_j,bus_i] = -1/Xd[bus_i,1]
+               Ybus_pre_B[bus_i,bus_j] = -1/Xd[bus_i,0]  #using X'd to calc --> should this be Xd? YES, switched
+               Ybus_pre_B[bus_j,bus_i] = -1/Xd[bus_i,0]
            else:
-               Ybus_pre_B[bus_i,bus_j] = 1/Xd[bus_i,1]
-               Ybus_pre_B[bus_j,bus_i] = 1/Xd[bus_i,1]
+               Ybus_pre_B[bus_i,bus_j] = 1/Xd[bus_i,0]
+               Ybus_pre_B[bus_j,bus_i] = 1/Xd[bus_i,0]
 
 #System bus series admittances
 for bus_i in range(NGEN,NBUS):
