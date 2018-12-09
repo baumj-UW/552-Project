@@ -45,8 +45,12 @@ H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
 Xd = np.array([[0.08, 0.016],
              [0.18, 0.036 ],
              [0.12, 0.024]])  #Array of synchronous reactances, [Xd, X'd] per gen
+Xq = np.array([[0.16, 0.16],
+             [0.36, 0.36 ],
+             [0.24, 0.24]])  #Array of synchronous reactances, [Xq, X'q] per gen
 #Tdo = np.array([[1.2],[1.4],[1.5]]) #Open circuit time constants T'do
-Tdo = np.array([[5.0],[5.0],[5.0]]) #Open circuit time constants T'do
+Tdo = np.array([[5.0],[5.0],[5.0]]) #Open circuit time transient d time constants T'do
+Tqo = np.array([[10.0],[10.0],[10.0]]) #Open circuit subtransient q time constants T"qo
 D = np.array([[0.0],[0.0],[0.0]]) #Open circuit time constants T'do
 
 # Step 1 - Convert to common base (already done for this project) 
@@ -82,7 +86,7 @@ for bus_i in range(0,NGEN):
     for bus_j in range(0,NBUS):
         if BUS_CONN[bus_i,bus_j]:
            if bus_i == bus_j:
-               Ybus_pre_B[bus_i,bus_j] = -1/Xd[bus_i,0]  #using X'd to calc --> should this be Xd? YES, switched
+               Ybus_pre_B[bus_i,bus_j] = -1/Xd[bus_i,0]  
                Ybus_pre_B[bus_j,bus_i] = -1/Xd[bus_i,0]
            else:
                Ybus_pre_B[bus_i,bus_j] = 1/Xd[bus_i,0]
@@ -227,13 +231,14 @@ fault_times = np.linspace(0,F_CLEAR,round(F_CLEAR/0.005))
 postf_times = np.linspace(F_CLEAR,END_SIM,round((END_SIM-F_CLEAR)/0.005))
 
 #remove Vmag from inputs, not needed for 3rd order
-def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran,Tdo): #y is an array of state variables [w,delta,E'q]
+def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,Xq,Tdo,Tqo): #y is an array of state variables [w,delta,E'q,E'd]
     
     D = 0.0 ## Neglect Pd for 2nd order Model
 
     omega = y[0:NGEN]
     delta = y[NGEN:2*NGEN]
     EqTran = y[2*NGEN:3*NGEN]
+    EdTran = y[3*NGEN:4*NGEN]
     
     #Use Edq to find Idq
     Edq = np.array((np.array(EdTran),np.array(EqTran))).T
@@ -243,13 +248,15 @@ def gen_Model(t,y,Vmag,Ybus,Pm,M,Ef,Xd,EdTran,Tdo): #y is an array of state vari
     Pe = np.zeros((NGEN,1))
     dWdt = np.zeros((NGEN,1))
     dEqTran = np.zeros((NGEN,1))
+    dEdTran = np.zeros((NGEN,1))
     for gen in range(NGEN):
         Pe[gen] = Pg_i(gen,Ybus,Emag,delta)
         dWdt[gen] = 1/M[gen]*(Pm[gen] - Pe[gen] - D*omega[gen])  
         dEqTran[gen] = 1/Tdo[gen]*(Ef[gen] - EqTran[gen] + Idq[gen,0]*(Xd[gen,0] - Xd[gen,1])) # Xd columns [Xd, X'd]
- 
+        dEdTran[gen] = 1/Tqo[gen]*(-EdTran[gen] - Idq[gen,1]*(Xq[gen,0] - Xq[gen,1])) # Xd columns [Xd, X'd]
     derivs = [dWdt[0],dWdt[1],dWdt[2],omega[0],omega[1],omega[2],
-              dEqTran[0],dEqTran[1],dEqTran[2]] 
+              dEqTran[0],dEqTran[1],dEqTran[2],
+              dEdTran[0],dEdTran[1],dEdTran[2]] 
     return derivs
 
 
@@ -271,14 +278,14 @@ def Pg_i (gen_i,Ybus,Vmag,delta): #assume gens are numbered {0,1,2}
 
 # # Pre-fault initial condits and args --> send as an array to gen_Model 
 #Create array of initial generator conditions [pre-fault;postfault clear]
-initGen = np.zeros((2,3*NGEN)) #[w1, w2, w3, delta1, delta2, delta3, EqTran..] w = 0
+initGen = np.zeros((2,4*NGEN)) #[w1, w2, w3, delta1, delta2, delta3, EqTran, EdTran..] w = 0
 for gen in range(NGEN):
     initGen[0,gen+NGEN]  = deltaT[gen,0] 
     initGen[0,gen+2*NGEN] = Edq_f[gen,1] # 'init values of EqTran...' from internal emf calcs?
-    #initGen[0,gen+3*NGEN] = Edq_f[gen,0] # init values of EdTran for 4th order
+    initGen[0,gen+3*NGEN] = Edq_f[gen,0] # init values of EdTran for 4th order
     
 #solve response during fault time 0,0.1s
-fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Yfault_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0],Tdo),
+fault_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Yfault_red,Pbus[0:NGEN],M,Ef,Xd,Xq,Tdo,Tqo),
                 [0,F_CLEAR],initGen[0,:],t_eval=fault_times)   
 
 ## Set new init condits from fault solution 
@@ -286,9 +293,10 @@ for gen in range(NGEN):
     initGen[1,gen] = fault_sol.y[gen,len(fault_sol.t)-1] #omega at F_CLEAR
     initGen[1,gen+NGEN] = fault_sol.y[gen+NGEN,len(fault_sol.t)-1] #delta at F_CLEAR
     initGen[1,gen+2*NGEN] = fault_sol.y[gen+2*NGEN,len(fault_sol.t)-1] #EqTran at F_CLEAR
+    initGen[1,gen+3*NGEN] = fault_sol.y[gen+3*NGEN,len(fault_sol.t)-1] #EdTran at F_CLEAR
 
 #solve response post fault clearing
-postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN],M,Ef,Xd,Edq_f[:,0],Tdo),
+postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN],M,Ef,Xd,Xq,Tdo,Tqo),
                 [F_CLEAR,END_SIM],initGen[1,:],t_eval=postf_times)    
 
 
@@ -296,7 +304,7 @@ postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN]
 
 # Combine solution results to plot <-- remove repeated time step at fault clear
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
-results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
+results = np.zeros((4*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
 
 speedFig = plt.figure(1) #rotor speed plot
 for omega in range(NGEN):
@@ -335,10 +343,20 @@ emfFig = plt.figure(4)
 #Create Eq plot
 for Eq in range(NGEN*2,NGEN*3):
     results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
-    #plt.subplot(2,2,4) #4th subplot in figs
+    plt.subplot(2,1,1) #4th subplot in figs
     plt.plot(sim_times,results[Eq,:],label='Gen '+str(Eq-NGEN*2+1)) # add label to plots
 plt.xlabel('Time (sec)')
 plt.ylabel("E'q (pu)")
+plt.legend()
+plt.grid(True)
+
+#Create Eq plot
+for Ed in range(NGEN*3,NGEN*4):
+    results[Ed,:] = np.concatenate((fault_sol.y[Ed,:],postf_sol.y[Ed,:]))
+    plt.subplot(2,1,2) #4th subplot in figs
+    plt.plot(sim_times,results[Ed,:],label='Gen '+str(Ed-NGEN*3+1)) # add label to plots
+plt.xlabel('Time (sec)')
+plt.ylabel("E'd (pu)")
 plt.legend()
 plt.grid(True)
 
