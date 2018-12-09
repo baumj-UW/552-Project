@@ -25,7 +25,7 @@ NGEN = 3
 NBUS = 8
 NLOAD = 2 #not currently used
 F_CLEAR = 0.1 #Time at which the fault is cleared 
-END_SIM = 5 #End time of simulation 
+END_SIM = 1.5 #End time of simulation 
 BUS_CONN = np.array([[1,0,0,1,0,0,0,0],
                     [0,1,0,0,1,0,0,0],
                     [0,0,1,0,0,1,0,0],
@@ -42,11 +42,12 @@ W_S = 2*math.pi*60 #synchronous speed
 
 Sn = 1.0 #Per unit rating of the generators (100MVA base) 
 H = np.array([[10.0],[3.01],[6.4]]) # Inertia constant from book (100MVA base)
-Xd = np.array([[0.4, 0.08],
-             [0.9, 0.18],
-             [0.6, 0.12]])  #Array of synchronous reactances, [Xd, X'd] per gen
-Xd = Xd/5 #test adjustment of Xd to match text example powerflow calcs
-Tdo = np.array([[1.2],[1.4],[1.5]]) #Open circuit time constants T'do
+Xd = np.array([[0.08, 0.016],
+             [0.18, 0.036 ],
+             [0.12, 0.024]])  #Array of synchronous reactances, [Xd, X'd] per gen
+#Tdo = np.array([[1.2],[1.4],[1.5]]) #Open circuit time constants T'do
+Tdo = np.array([[5.0],[5.0],[5.0]]) #Open circuit time constants T'do
+D = np.array([[0.0],[0.0],[0.0]]) #Open circuit time constants T'do
 
 # Step 1 - Convert to common base (already done for this project) 
 
@@ -120,7 +121,7 @@ for load in range(6,8): # more generic way to iterate through loads?
 #Create complex pre-fault Ybus    
 Ybus_pre = Ybus_pre_G + 1j*Ybus_pre_B
  
-#"remove" bus 7 during fault 
+#"remove" bus 7 during fault <--- change this calc to use X'd!!!
 Ybus_fault = np.delete(Ybus_pre,6,0) #remove row 7 from Ybus
 Ybus_fault = np.delete(Ybus_fault,6,1) #remove column 7 from Ybus
 
@@ -143,9 +144,9 @@ def calcEi(Vt,Vtheta,xd,P,Q): #returns Eab based on input condits
 # Calculate internal gen voltages <-- this can be made more generic based on BUS_CONN
 Eab = np.zeros((NGEN,1),dtype=complex) 
 
-Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd[0,1],Pbus[1-1],Qbus[1-1]) 
-Eab[1] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd[1,1],Pbus[2-1],Qbus[2-1])  
-Eab[2] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd[2,1],Pbus[3-1],Qbus[3-1])
+Eab[0] = calcEi(Vmag[4-1],Vtheta[4-1,0],Xd[0,0],Pbus[1-1],Qbus[1-1]) 
+Eab[1] = calcEi(Vmag[5-1],Vtheta[5-1,0],Xd[1,0],Pbus[2-1],Qbus[2-1])  
+Eab[2] = calcEi(Vmag[6-1],Vtheta[6-1,0],Xd[2,0],Pbus[3-1],Qbus[3-1])
 
 # Step 5 Kron reduction 
 # Yreduced = Ynn - Yns*(1/Yss)*Ysn
