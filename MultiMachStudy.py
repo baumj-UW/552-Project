@@ -293,130 +293,59 @@ postf_sol = solve_ivp(lambda t, y: gen_Model(t,y,abs(Eab),Ypost_red,Pbus[0:NGEN]
 
 
 
-figs = plt.figure(1)
+
 # Combine solution results to plot <-- remove repeated time step at fault clear
 sim_times = np.concatenate((fault_sol.t,postf_sol.t))
 results = np.zeros((3*NGEN,len(sim_times))) #array of results [speed;delta;Eq]
+
+speedFig = plt.figure(1) #rotor speed plot
 for omega in range(NGEN):
     results[omega,:] = np.concatenate((fault_sol.y[omega,:],
                                        postf_sol.y[omega,:]),axis=0)
-    plt.subplot(2,2,1) #first subplot in figs
     plt.plot(sim_times,(results[omega,:]+W_S)/W_S,
-             label='Gen '+str(omega+1)) # add label to plots    
+             label='Gen '+str(omega+1))    
 plt.xlabel('Time (sec)')
 plt.ylabel('Rotor Speed (pu)')
 plt.legend()
 plt.grid(True)
 
+rotorAngleFig = plt.figure(2) #rotor angle plot
 for delta in range(NGEN,NGEN*2):
     results[delta,:] = np.concatenate((fault_sol.y[delta,:],postf_sol.y[delta,:]))
-    plt.subplot(2,2,2) #2nd subplot in figs
     plt.plot(sim_times,(180/math.pi)*results[delta,:],
-             label='Gen '+str(delta-NGEN+1)) # add label to plots
+             label='Gen '+str(delta-NGEN+1))
 plt.xlabel('Time (sec)')
 plt.ylabel('Rotor Angle (deg)')
 plt.legend()
 plt.grid(True)
 
+
 #Create relative rotor angle plot
+relativeAngleFig = plt.figure(3)
 rel_delta = np.zeros((NGEN-1,len(sim_times)))
 for delta in range(NGEN-1):
     rel_delta[delta,:] = results[delta+NGEN+1,:] - results[NGEN,:] #relative angle (Gen_i - Gen1)
-    plt.subplot(2,2,3) #3rd subplot in figs
     plt.plot(sim_times,(180/math.pi)*rel_delta[delta,:],label='$\delta$'+str(delta+2)+'1')
 plt.xlabel('Time (sec)')
 plt.ylabel('Relative Rotor Angles (deg)')
 plt.legend()
 plt.grid(True)
 
+emfFig = plt.figure(4)
 #Create Eq plot
 for Eq in range(NGEN*2,NGEN*3):
     results[Eq,:] = np.concatenate((fault_sol.y[Eq,:],postf_sol.y[Eq,:]))
-    plt.subplot(2,2,4) #4th subplot in figs
+    #plt.subplot(2,2,4) #4th subplot in figs
     plt.plot(sim_times,results[Eq,:],label='Gen '+str(Eq-NGEN*2+1)) # add label to plots
 plt.xlabel('Time (sec)')
 plt.ylabel("E'q (pu)")
 plt.legend()
 plt.grid(True)
 
-plt.show(figs)
-    
-
-# cmath.rect(r, phi) --> to convert polar to rect. value to combine Vmag and Vtheta
-
-## plot concats
-# #  #plot speeds
-# plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
-# plt.plot(sol.t,sol.y[1,:],label='Gen2 w')
-# plt.plot(sol.t,sol.y[2,:],label='Gen3 w')
-# # plt.plot(sol_gen2.t,sol_gen2.y[0,:])
-# # plt.plot(sol_gen3.t,sol_gen3.y[0,:])
-# #plt.plot(t,response[:,1])
-# plt.xlabel('time')
-# plt.ylabel('Speed')
-# plt.legend()
-# plt.show()
-
-#  #plot speeds
-#plt.plot(sol.t,sol.y[0,:],label='Gen1 w')
-# 
-
-
-# #forward Euler Yn+1 = Yn + h*f(Tn,Yn)
-# h = 0.01 #step size
-# 
-# # #time points
-# t = np.linspace(0,1.5)  #change time steps 
-# 
-# #Calc speed deviation
-# gen1 = np.zeros([np.size(t),2])  #gen1 is an array of [rotor angles, speed deviatons] 
-# 
-# # # init condits
-# gen1[0,:] = Vtheta[0], 0.0  #init condits [delta0, w0]
-# 
-# #Iterate through time steps
-# for tstep in range(len(t)-1):
-#     gen1[tstep+1,0] = gen1[tstep,0] + h*gen1[tstep,1]  #iterate next step for rotor angle calc (this is delta_hat at time t)
-#     
-#     gen1[tstep+1,1] = gen1[tstep,0] + h*dOmega_hat(tstep,Pm,Pe,D,dOmega) 
+plt.show()
     
 
 
 
 
-# ODE solver method -- NOT WORKING
-##Gen Model --> expand each equation to be a vector representing each gen; or loop function for each gen
-# def genModel (gens, t):
-#     swingEqn, deltaW = gens  # vector of variable outputs
-#     M = 0.6 #2*H*S/w_s 
-#     Pm = 1.999 
-#     Pe = 1.75
-#     DAMP = 1.0 ## does this need to be here?
-# #     swingEqn = (1/M)*Pm - Pe - DAMP*deltaW # M*delta(w') = Pm - Pe - D*delta(w)
-# #     speedEqn = deltaW
-#     dgdt = [(1/M)*Pm - Pe - DAMP*deltaW, deltaW] #, emfEqn]
-#     return dgdt # dgdt = synch gen model diff eqs
-# 
-# def Pg_i (gen,Ybus,Vmag,Vtheta):
-#     #np.real(Ybus[ii]) = Gii, np.imag(Ybus[ii]) = B
-#     Pg = (Vmag[gen-1] ** 2) * np.real(Ybus[gen-1,gen-1])
-#     # Pe = (Vmag[gen]^2 * G[ii]) + Vmag[gen]*Vmag[gen_k]*(B[ik]*sin(Vtheta[gen]-Vtheta[k])... sum
-#     return Pg
-# 
-# Pg1 = Pg_i(1,Ypre_red,Vmag,Vtheta)
-# 
-# # init condits
-# gen0 = [Vtheta[0], 0.0]  #init condits [delta0, w0]
-# 
-# #time points
-# t = np.linspace(0,1.5)  #change time steps 
-# 
-# #solve gen eqns
-# response = odeint(genModel,gen0,t)
-#  
-#  #plot
-# plt.plot(t,response[:,0])
-# plt.plot(t,response[:,1])
-# plt.xlabel('time')
-# plt.ylabel('y(t)')
-# plt.show()
+
